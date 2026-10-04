@@ -6,7 +6,7 @@ Cloudflare Tunnel 経由で外部公開する構成です。
 
 インバウンドポートを開けずに、WebUI を HTTPS の公開ホスト名で利用できます。
 
-```
+```text
                         ┌────────────────────┐
   Internet ── HTTPS ───▶│ Cloudflare Edge    │
                         │ (Access / ZeroTrust)│
@@ -202,6 +202,7 @@ agent コンテナは `API_SERVER_ENABLED=true` / `API_SERVER_HOST=0.0.0.0` /
 ### ルート追加
 
 トークン方式: Zero Trust → **Networks > Tunnels** → 対象トンネル → **Public Hostname** を追加:
+
 - Subdomain / Domain: 例 `agent.example.com`
 - Service: `HTTP`
 - URL: `hermes-agent:8642`

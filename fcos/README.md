@@ -4,7 +4,7 @@
 設定は宣言的な **Butane**（`config.bu`）で管理し、**Ignition**（`config.ign`）へ変換して
 インストール時に流し込みます。
 
-```
+```text
 config.bu ──(butane)──▶ config.ign ──(coreos-installer)──▶ ディスクへインストール
                                                               └─ 初回起動時に Ignition 適用
 ```
@@ -112,7 +112,7 @@ passwd:
 ISO を起動し、ブートメニューでカーネル引数を編集（isolinux は `Tab`、GRUB は `e`）
 して以下を追加。インストール完了後に自動で再起動します。
 
-```
+```text
 coreos.inst.install_dev=/dev/sda
 coreos.inst.ignition_url=http://192.168.1.10:8000/config.ign
 ```
