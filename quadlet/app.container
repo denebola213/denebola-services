@@ -1,0 +1,22 @@
+[Unit]
+Description=My app
+Wants=network-online.target
+After=network-online.target db.service
+Requires=db.service
+
+[Container]
+Image=docker.io/myorg/myapp:latest
+ContainerName=app
+Network=app.network
+PublishPort=8080:80
+Environment=DATABASE_URL=postgres://postgres:secret@db:5432
+# EnvironmentFile=%h/app/app.env
+AutoUpdate=registry
+Restart=always
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

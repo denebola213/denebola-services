@@ -1,0 +1,8 @@
+[Unit]
+Description=app network
+
+[Network]
+NetworkName=app
+
+[Install]
+WantedBy=default.target

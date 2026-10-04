@@ -1,0 +1,8 @@
+[Unit]
+Description=app volume
+
+[Volume]
+VolumeName=app-data
+
+[Install]
+WantedBy=default.target

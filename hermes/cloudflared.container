@@ -1,0 +1,21 @@
+[Unit]
+Description=Cloudflare Tunnel for Hermes WebUI (token-managed)
+Wants=network-online.target
+After=network-online.target
+Requires=hermes-webui.service
+After=hermes-webui.service
+
+[Container]
+ContainerName=cloudflared
+Image=docker.io/cloudflare/cloudflared:latest
+Network=hermes.network
+Exec=tunnel --no-autoupdate run
+# TUNNEL_TOKEN lives in this env file (never on the command line).
+EnvironmentFile=%h/hermes/cloudflared.env
+AutoUpdate=registry
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

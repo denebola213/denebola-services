@@ -1,0 +1,8 @@
+[Unit]
+Description=Hermes shared network
+
+[Network]
+NetworkName=hermes
+
+[Install]
+WantedBy=default.target

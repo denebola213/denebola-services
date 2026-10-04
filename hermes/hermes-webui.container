@@ -1,0 +1,31 @@
+[Unit]
+Description=Hermes WebUI
+Wants=network-online.target
+After=network-online.target
+Requires=hermes-agent.service
+After=hermes-agent.service
+
+[Container]
+ContainerName=hermes-webui
+Image=ghcr.io/nesquena/hermes-webui:latest
+Network=hermes.network
+Volume=hermes-home.volume:/home/hermeswebui/.hermes
+Volume=hermes-agent-src.volume:/home/hermeswebui/.hermes/hermes-agent:ro
+# Edit / browse files from the WebUI at /workspace. %h = your home directory.
+Volume=%h/workspace:/workspace:Z
+EnvironmentFile=%h/hermes/hermes.env
+Environment=HERMES_WEBUI_HOST=0.0.0.0
+Environment=HERMES_WEBUI_PORT=8787
+Environment=HERMES_WEBUI_STATE_DIR=/home/hermeswebui/.hermes/webui
+Environment=HERMES_API_URL=http://hermes-agent:8642
+UserNS=keep-id
+# Loopback only. cloudflared reaches the WebUI over hermes.network.
+PublishPort=127.0.0.1:8787:8787
+AutoUpdate=registry
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

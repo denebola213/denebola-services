@@ -1,0 +1,21 @@
+# ==== downloaded tools / install media (large binaries) ====
+# Butane binary (see fcos/README.md for download)
+fcos/butane
+
+# Fedora CoreOS live ISO
+fcos/*.iso
+
+# Generated Ignition config (from fcos/config.bu via `butane`)
+fcos/config.ign
+
+# ==== secrets / local environment files ====
+hermes/*.env
+!hermes/*.env.example
+hermes/cloudflared/
+*.key
+*.pem
+
+# ==== misc ====
+*.log
+*.tmp
+.DS_Store

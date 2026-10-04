@@ -1,0 +1,8 @@
+[Unit]
+Description=Hermes shared home (config, sessions, skills, memory)
+
+[Volume]
+VolumeName=hermes-home
+
+[Install]
+WantedBy=default.target

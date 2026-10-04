@@ -1,0 +1,8 @@
+[Unit]
+Description=Hermes agent source (shared read-only with the WebUI)
+
+[Volume]
+VolumeName=hermes-agent-src
+
+[Install]
+WantedBy=default.target

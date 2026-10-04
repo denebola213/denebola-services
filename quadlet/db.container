@@ -1,0 +1,21 @@
+[Unit]
+Description=Postgres
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=docker.io/library/postgres:16
+ContainerName=db
+Network=app.network
+Volume=app.volume:/var/lib/postgresql/data:Z
+Environment=POSTGRES_PASSWORD=secret
+HealthCmd=pg_isready -U postgres
+HealthInterval=10s
+Restart=always
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

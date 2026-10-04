@@ -1,0 +1,29 @@
+[Unit]
+Description=Hermes Agent (gateway)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=hermes-agent
+Image=docker.io/nousresearch/hermes-agent:latest
+Exec=gateway run
+Network=hermes.network
+Volume=hermes-home.volume:/home/hermes/.hermes
+Volume=hermes-agent-src.volume:/opt/hermes
+EnvironmentFile=%h/hermes/hermes.env
+Environment=HERMES_HOME=/home/hermes/.hermes
+Environment=API_SERVER_ENABLED=true
+Environment=API_SERVER_HOST=0.0.0.0
+# rootless: map the host UID/GID to the same IDs inside the container so the
+# entrypoint's usermod/chown works and host files stay owned by you.
+UserNS=keep-id
+# Loopback only. The WebUI reaches the gateway over hermes.network.
+PublishPort=127.0.0.1:8642:8642
+AutoUpdate=registry
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
