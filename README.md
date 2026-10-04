@@ -7,7 +7,7 @@
 | --- | --- |
 | [`fcos/`](fcos/README.md) | Fedora CoreOS のインストール（Butane / Ignition） |
 | [`quadlet/`](quadlet/QUADLET.md) | Podman Quadlet の導入手順 |
-| [`hermes/`](hermes/README.md) | Hermes Agent + WebUI の Cloudflare Tunnel 公開構成 |
+| [`hermes/`](hermes/README.md) | Hermes Agent + WebUI + Dashboard の Cloudflare Tunnel 公開構成 |
 
 ## Markdown lint
 

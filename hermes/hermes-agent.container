@@ -14,6 +14,12 @@ EnvironmentFile=%h/hermes/hermes.env
 Environment=HERMES_HOME=/home/hermes/.hermes
 Environment=API_SERVER_ENABLED=true
 Environment=API_SERVER_HOST=0.0.0.0
+# Built-in management dashboard, supervised by s6 next to the gateway.
+# Non-loopback bind engages the auth gate, so an auth provider
+# (HERMES_DASHBOARD_BASIC_AUTH_*) is required or the dashboard fails closed.
+Environment=HERMES_DASHBOARD=1
+Environment=HERMES_DASHBOARD_HOST=0.0.0.0
+Environment=HERMES_DASHBOARD_PORT=9119
 # rootless: map the HOST uid/gid onto the image's hermes uid/gid (10000).
 # Plain "keep-id" injects the host user at uid 1000, which collides with the
 # image's usermod -u HERMES_UID (uid already exists) and aborts stage2, leaving
@@ -23,6 +29,8 @@ Environment=API_SERVER_HOST=0.0.0.0
 UserNS=keep-id:uid=10000,gid=10000
 # Loopback only. The WebUI reaches the gateway over hermes.network.
 PublishPort=127.0.0.1:8642:8642
+# Loopback only. cloudflared reaches the dashboard over hermes.network.
+PublishPort=127.0.0.1:9119:9119
 AutoUpdate=registry
 
 [Service]

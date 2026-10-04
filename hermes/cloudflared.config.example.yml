@@ -8,6 +8,7 @@
 # 3) Route DNS once (add the agent hostname too if you expose the CLI/API):
 #      cloudflared tunnel route dns hermes hermes.example.com
 #      cloudflared tunnel route dns hermes agent.example.com
+#      cloudflared tunnel route dns hermes dashboard.example.com
 # 4) Replace the Exec/Volume lines in cloudflared.container with the ones
 #    documented in README.md ("ローカル config.yml 方式").
 
@@ -21,4 +22,7 @@ ingress:
   # Agent gateway API (OpenAI-compatible) for CLI / curl / SDK / other clients
   - hostname: agent.example.com
     service: http://hermes-agent:8642
+  # Built-in management dashboard (needs HERMES_DASHBOARD=1 + basic auth)
+  - hostname: dashboard.example.com
+    service: http://hermes-agent:9119
   - service: http_status:404

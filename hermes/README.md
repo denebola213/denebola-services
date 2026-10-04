@@ -14,22 +14,28 @@ Cloudflare Tunnel 経由で外部公開する構成です。
                                   │ Tunnel (outbound のみ)
                         ┌─────────▼──────────┐
                         │ cloudflared        │  hermes.network
-                        └─────────┬──────────┘
-                                  │ http://hermes-webui:8787
-                        ┌─────────▼──────────┐
-                        │ hermes-webui :8787 │
-                        └───┬──────────┬─────┘
+                        └──┬────────┬────────┘
+      http://hermes-webui:8787 │  │ http://hermes-agent:9119  (dashboard)
+      http://hermes-agent:8642 │  │ (gateway API, 任意)
+                           │   │
+                        ┌──▼───▼───────────┐
+                        │ hermes-webui     │
+                        │ :8787            │
+                        └───┬──────────┬───┘
               hermes-home   │          │  hermes-agent-src (ro)
-                        ┌───▼──────────▼─────┐
-                        │ hermes-agent :8642 │  (gateway API)
-                        └────────────────────┘
+                        ┌───▼──────────▼───┐
+                        │ hermes-agent     │
+                        │ :8642 gateway API│
+                        │ :9119 dashboard  │
+                        └──────────────────┘
 ```
 
 - ネットワーク: `hermes`（Podman カスタムネットワーク、名前解決に使用）
 - ボリューム: `hermes-home`（config/sessions/skills/memory）、`hermes-agent-src`（エージェントのソース）
-- ポート公開は両方 `127.0.0.1` のみ。外部到達は cloudflared 経由だけ。
-- WebUI 用（`hermes-webui:8787`）に加え、CLI/API 用に agent の
-  OpenAI 互換 API（`hermes-agent:8642`）も任意でトンネルへ追加できます（第 6 章）。
+- ポート公開はすべて `127.0.0.1` のみ。外部到達は cloudflared 経由だけ。
+- WebUI 用（`hermes-webui:8787`）に加え、管理用 Web Dashboard
+  （`hermes-agent:9119`）と CLI/API 用の OpenAI 互換 API
+  （`hermes-agent:8642`）も任意でトンネルへ追加できます（第 6 章）。
 
 ---
 
@@ -139,6 +145,15 @@ id -g   # WANTED_GID に入れる (hermes-webui 用)
   上記の hex / `token_urlsafe` が無難です。漏洩すると任意コマンド実行につながるため 256bit 相当を推奨。
 - `HERMES_WEBUI_PASSWORD` を設定（外部公開では必須）。
 - `HERMES_WEBUI_ALLOWED_ORIGINS` に公開ホスト名（例 `https://hermes.example.com`）。
+- `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD` を設定。
+  agent コンテナは `HERMES_DASHBOARD=1` / `HERMES_DASHBOARD_HOST=0.0.0.0` で
+  Web Dashboard を有効化するため、**非 loopback bind の認証ゲート**が必ず有効になります。
+  プロバイダ未設定だとダッシュボードは fail-closed で起動しないので必須です。
+- `HERMES_DASHBOARD_BASIC_AUTH_SECRET` に 32 byte 以上のランダム値
+  （`openssl rand -base64 32`）。固定しないと再起動のたびログアウトされます。
+- `HERMES_DASHBOARD_PUBLIC_URL` にダッシュボードの公開 URL（例
+  `https://dashboard.example.com`）。DNS リバインディング対策の Host / Origin
+  完全一致と、OAuth のコールバック URL に使われます。
 
 `~/hermes/cloudflared.env`:
 
@@ -150,10 +165,11 @@ id -g   # WANTED_GID に入れる (hermes-webui 用)
 2. 表示されるトークンを `~/hermes/cloudflared.env` の `TUNNEL_TOKEN` に貼り付け。
 3. トンネルの **Public Hostname** を追加:
    - WebUI: `hermes.example.com` → Service `HTTP` → URL `hermes-webui:8787`
+   - Web Dashboard（管理用・任意）: `dashboard.example.com` → Service `HTTP` → URL `hermes-agent:9119`
    - Agent API（CLI/API 用・任意）: `agent.example.com` → Service `HTTP` → URL `hermes-agent:8642`
      （cloudflared は `hermes` ネットワーク上にいるため、コンテナ名で名前解決できます）
 4. 必要なら **Access** ポリシーでメール OTP 等を追加（WebUI パスワードと二重防御）。
-   Agent API を公開する場合は Access での保護を強く推奨（第 6 章）。
+   Dashboard は Basic 認証、Agent API を公開する場合は Access での保護を強く推奨（第 6 章）。
 5. トークンを入手したら保存し、環境ファイルに反映。
 
 ### 3.4 起動
@@ -181,11 +197,13 @@ journalctl --user -u hermes-webui.service -f
 # ローカル確認（公開前の切り分け）
 curl -fsS http://127.0.0.1:8787/health
 curl -fsS http://127.0.0.1:8642/health          # agent API
+curl -fsS http://127.0.0.1:9119/api/status | jq '.auth_required, .auth_providers'  # dashboard
 podman ps --format '{{.Names}}\t{{.Status}}\t{{.Ports}}'
 
 # トンネル経由
 curl -I https://hermes.example.com
 curl -fsS https://agent.example.com/health       # API を公開した場合
+curl -I https://dashboard.example.com            # Dashboard を公開した場合（401/302 でログインへ）
 ```
 
 WebUI が外部から開けない場合は `cloudflared` のログで
@@ -239,14 +257,63 @@ getent hosts hermes-webui` で確認できます。
 
 ---
 
-## 6. CLI / API クライアントから agent を使う
+## 6. 外部クライアント / Web Dashboard を使う
+
+ここでは WebUI 以外の使い方として、管理用 **Web Dashboard（9119）** と、
+curl・OpenAI SDK・Open WebUI・各種 CLI クライアント向けの
+**OpenAI 互換 API サーバー（8642）** を扱います。どちらも任意です。
+
+### Web Dashboard（管理 UI）
+
+`hermes-agent.container` が既定で `HERMES_DASHBOARD=1` /
+`HERMES_DASHBOARD_HOST=0.0.0.0` を設定しているため、組み込みの管理
+ダッシュボード（`http://hermes-agent:9119`）が gateway と並んで起動します。
+config / API キー / Skills / MCP / Logs / Analytics / Cron / プロファイルなどを
+ブラウザから管理できます。
+
+非 loopback bind のため**認証ゲートが常時有効**です。3.2 の
+`HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `..._PASSWORD` / `..._SECRET` を
+設定しないと fail-closed で起動しません。
+
+トークン方式: Zero Trust → **Networks > Tunnels** → 対象トンネル → **Public Hostname**:
+
+- Subdomain / Domain: 例 `dashboard.example.com`
+- Service: `HTTP`
+- URL: `hermes-agent:9119`
+
+ローカル `config.yml` 方式: ingress に追記（`cloudflared.config.example.yml` に記載済み）:
+
+```yaml
+  - hostname: dashboard.example.com
+    service: http://hermes-agent:9119
+```
+
+`HERMES_DASHBOARD_PUBLIC_URL` はトンネルに割り当てた公開 URL と一致させてください
+（Host / Origin の DNS リバインディング対策に使用）。
+
+ローカル確認（公開前の切り分け）:
+
+```bash
+curl -fsS http://127.0.0.1:9119/api/status | jq '.auth_required, .auth_providers'
+# => true
+# => ["basic"]
+```
+
+`auth_required: true` と `["basic"]` が返れば認証ゲート有効。ブラウザで
+`https://dashboard.example.com` を開き、Basic 認証でログインします。
+
+> TLS 終端が cloudflared コンテナ（非 loopback）のため、`dashboard.public_url` と
+> 併せて `dashboard.trusted_proxies` に cloudflared の IP を入れると
+> `X-Forwarded-Proto` を信頼し、Cookie に `Secure` を付与できます。IP は
+> `podman inspect cloudflared | jq '.[].NetworkSettings.Networks'` で確認し、
+> `hermes-home` ボリューム内の `config.yaml` に記載します（任意の強化）。
+
+### Agent API のルート追加
 
 WebUI 以外（curl・OpenAI SDK・Open WebUI・各種 CLI クライアントなど）から使うには、
 agent の **OpenAI 互換 API サーバー（8642）** をトンネルに公開します。
 agent コンテナは `API_SERVER_ENABLED=true` / `API_SERVER_HOST=0.0.0.0` /
 `API_SERVER_KEY` で既に有効化済みです。
-
-### ルート追加
 
 トークン方式: Zero Trust → **Networks > Tunnels** → 対象トンネル → **Public Hostname** を追加:
 
@@ -306,11 +373,10 @@ GATEWAY_PROXY_KEY=<API_SERVER_KEY>
   `API_SERVER_KEY` は必須で、漏洩すると任意コマンド実行につながります。
 - 公開する場合は **Cloudflare Access**（Service Token / OTP など）で前段を保護し、
   可能なら特定 IP に限定してください。
-- Hermes Desktop の Remote Gateway は 8642 ではなく dashboard 側（9119、
-  `hermes serve` / `hermes dashboard`）です。使う場合は agent に
-  `HERMES_DASHBOARD=1` と `HERMES_DASHBOARD_HOST=0.0.0.0` を追加し、
-  非 loopback bind のため `HERMES_DASHBOARD_BASIC_AUTH_*` または OAuth を
-  設定してください（`cloudflared` には `hermes-agent:9119` を追加）。
+- Hermes Desktop の Remote Gateway は 8642 ではなく dashboard 側（9119）です。
+  本構成では有効化済みなので、Desktop の **Settings → Gateways → Remote gateway** に
+  `https://dashboard.example.com` と Basic 認証情報を入力します（第 6 章の
+  「Web Dashboard」参照）。
 
 ---
 
@@ -439,6 +505,10 @@ systemctl --user start hermes-webui.service
 | agent が `usermod: UID '1000' already exists` で crash loop | `HERMES_UID` / `HERMES_GID` が `10000`、agent が `UserNS=keep-id:uid=10000,gid=10000` か確認 |
 | cloudflared が数秒ごとに再起動 | 依存元の agent / webui が落ちていないか `systemctl --user status hermes-agent.service` を確認（`Requires` 連鎖） |
 | WebUI が `Gateway endpoint not reachable` | `API_SERVER_KEY` を 16 文字以上で設定し、`HERMES_WEBUI_GATEWAY_API_KEY` と同一にする |
+| dashboard が `Refusing to bind dashboard to 0.0.0.0 ... no auth providers are registered` で起動しない | `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `..._PASSWORD` を設定（非 loopback bind は認証必須・fail-closed） |
+| dashboard が再起動のたびログアウトする | `HERMES_DASHBOARD_BASIC_AUTH_SECRET` を 32 byte 以上で固定 |
+| dashboard が `403` / Host で弾かれる | `HERMES_DASHBOARD_PUBLIC_URL` をトンネルの公開 URL と完全一致させる |
+| dashboard が `Unable to reach origin service` | cloudflared の URL が `http://hermes-agent:9119` か確認（`podman exec cloudflared getent hosts hermes-agent`） |
 | トンネルが origin に到達できない | `cloudflared` が `hermes.network` に参加しているか、URL が `http://hermes-webui:8787` か確認 |
 | ログイン後にリダイレクトループ | `HERMES_WEBUI_ALLOWED_ORIGINS` と `*_TRUST_FORWARDED_*` の設定を確認 |
 | `Unit hermes-webui.service not found` | Quadlet の構文エラー。`podman-system-generator --user --dryrun` で確認 |
