@@ -67,17 +67,33 @@ sudo loginctl enable-linger "$USER"
 ### 3.1 ファイルを配置
 
 Quadlet ファイルは `~/.config/containers/systemd/`、環境ファイルは `~/hermes/` に置きます。
+ユニットはリポジトリへ**シンボリックリンク**、環境ファイルは**コピー**で配置します。
+
+Quadlet ユニットを symlink にしておくと、以後は `git pull` と `daemon-reload` だけで
+リポジトリ側の変更を反映できます（第 7 章）。一方、環境ファイルは秘密情報
+（`TUNNEL_TOKEN` / `API_SERVER_KEY` / パスワード）とホスト固有の UID/GID を含むため
+実ファイルとしてコピーし、`.example` に増えた変数は手動で追記します。
 
 ```bash
+# このリポジトリのクローン先（どこでも可）。以下は repo 直下で実行する例。
+REPO="$(pwd)"
+
 mkdir -p ~/.config/containers/systemd ~/hermes ~/workspace
 
-cp hermes/*.network hermes/*.volume hermes/*.container \
-   ~/.config/containers/systemd/
+# Quadlet ユニット: リポジトリの実ファイルへ symlink（必ず絶対パスで貼る）
+ln -sf "$REPO"/hermes/*.network "$REPO"/hermes/*.volume "$REPO"/hermes/*.container \
+    ~/.config/containers/systemd/
 
+# 環境ファイル: コピー
 cp hermes/hermes.env.example     ~/hermes/hermes.env
 cp hermes/cloudflared.env.example ~/hermes/cloudflared.env
 chmod 600 ~/hermes/hermes.env ~/hermes/cloudflared.env
 ```
+
+- symlink は絶対パスで作成します。壊れた相対 symlink は Quadlet generator が
+  読み飛ばすため、`cp` で上書きせず symlink のまま維持してください。
+- `git pull` でユニットを更新したら、`systemctl --user daemon-reload` を実行して
+  生成ユニットを再作成します（generator は `daemon-reload` 時にのみ走ります）。
 
 ### 3.2 環境ファイルを編集
 
@@ -270,6 +286,9 @@ GATEWAY_PROXY_KEY=<API_SERVER_KEY>
 ## 7. 運用コマンド
 
 ```bash
+# リポジトリのユニット定義を pull で反映（3.1 で symlink 配置した場合）
+git -C <リポジトリ> pull && systemctl --user daemon-reload
+
 systemctl --user restart hermes-webui.service
 systemctl --user stop cloudflared.service
 journalctl --user -u hermes-agent.service -f
