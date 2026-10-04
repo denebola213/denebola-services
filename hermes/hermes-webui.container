@@ -4,6 +4,11 @@ Wants=network-online.target
 After=network-online.target
 Requires=hermes-agent.service
 After=hermes-agent.service
+# Starting the WebUI also brings up the tunnel. cloudflared keeps its own
+# Requires=hermes-webui.service (so stopping the WebUI stops the tunnel and the
+# tunnel is ordered after it); Wants here only pulls it in on activation without
+# letting a tunnel failure block the WebUI.
+Wants=cloudflared.service
 
 [Container]
 ContainerName=hermes-webui
