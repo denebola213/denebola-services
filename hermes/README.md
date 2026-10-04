@@ -113,6 +113,24 @@ id -g   # HERMES_GID / WANTED_GID に入れる
 
 - `HERMES_UID` / `HERMES_GID` と `WANTED_UID` / `WANTED_GID` を **同じホスト UID/GID** に設定。
 - `API_SERVER_KEY` と `HERMES_WEBUI_GATEWAY_API_KEY` を **同じ長いランダム文字列**（16 文字以上）に。
+  1 回だけ生成して両方へ同じ値を貼り付けます:
+
+  ```bash
+  KEY="$(openssl rand -hex 32)"
+  sed -i "s|^API_SERVER_KEY=.*|API_SERVER_KEY=${KEY}|; \
+          s|^HERMES_WEBUI_GATEWAY_API_KEY=.*|HERMES_WEBUI_GATEWAY_API_KEY=${KEY}|" \
+    ~/hermes/hermes.env
+  ```
+
+  生成例（どちらでも可）:
+
+  ```bash
+  openssl rand -hex 32                          # 64 桁の 16 進数（環境ファイルに安全）
+  python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+  ```
+
+  `openssl rand -base64 48` は `+` `/` `=` を含むため、シェル変数や URL に渡す用途では
+  上記の hex / `token_urlsafe` が無難です。漏洩すると任意コマンド実行につながるため 256bit 相当を推奨。
 - `HERMES_WEBUI_PASSWORD` を設定（外部公開では必須）。
 - `HERMES_WEBUI_ALLOWED_ORIGINS` に公開ホスト名（例 `https://hermes.example.com`）。
 
