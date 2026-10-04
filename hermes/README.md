@@ -107,11 +107,17 @@ chmod 600 ~/hermes/hermes.env ~/hermes/cloudflared.env ~/hermes/backup.env
 `~/hermes/hermes.env`:
 
 ```bash
-id -u   # HERMES_UID / WANTED_UID に入れる
-id -g   # HERMES_GID / WANTED_GID に入れる
+id -u   # WANTED_UID に入れる (hermes-webui 用)
+id -g   # WANTED_GID に入れる (hermes-webui 用)
 ```
 
-- `HERMES_UID` / `HERMES_GID` と `WANTED_UID` / `WANTED_GID` を **同じホスト UID/GID** に設定。
+- `WANTED_UID` / `WANTED_GID` は **ホスト UID/GID** に設定（WebUI の実行ユーザー）。
+- `HERMES_UID` / `HERMES_GID` は **`10000` 固定**（agent イメージ内の `hermes`
+  ユーザーの UID/GID）。`hermes-agent.container` は `UserNS=keep-id:uid=10000,gid=10000`
+  でホスト UID を 10000 にマップするため、ここをホスト UID にしてはいけません。
+  ホスト UID を入れるとコンテナ内にホストユーザーが同 UID で注入され、
+  `usermod: UID already exists` で agent の起動フックが失敗し、crash loop →
+  依存する webui / cloudflared も連鎖再起動します。
 - `API_SERVER_KEY` と `HERMES_WEBUI_GATEWAY_API_KEY` を **同じ長いランダム文字列**（16 文字以上）に。
   1 回だけ生成して両方へ同じ値を貼り付けます:
 
@@ -429,7 +435,9 @@ systemctl --user start hermes-webui.service
 
 | 症状 | 対処 |
 |---|---|
-| `Permission denied` で起動失敗 | `~/hermes/hermes.env` の UID/GID が `id -u` / `id -g` と一致しているか確認 |
+| `Permission denied` で起動失敗 | `~/hermes/hermes.env` の `WANTED_UID` / `WANTED_GID` が `id -u` / `id -g` と一致しているか確認（`HERMES_UID` / `HERMES_GID` は `10000` 固定） |
+| agent が `usermod: UID '1000' already exists` で crash loop | `HERMES_UID` / `HERMES_GID` が `10000`、agent が `UserNS=keep-id:uid=10000,gid=10000` か確認 |
+| cloudflared が数秒ごとに再起動 | 依存元の agent / webui が落ちていないか `systemctl --user status hermes-agent.service` を確認（`Requires` 連鎖） |
 | WebUI が `Gateway endpoint not reachable` | `API_SERVER_KEY` を 16 文字以上で設定し、`HERMES_WEBUI_GATEWAY_API_KEY` と同一にする |
 | トンネルが origin に到達できない | `cloudflared` が `hermes.network` に参加しているか、URL が `http://hermes-webui:8787` か確認 |
 | ログイン後にリダイレクトループ | `HERMES_WEBUI_ALLOWED_ORIGINS` と `*_TRUST_FORWARDED_*` の設定を確認 |
@@ -441,5 +449,7 @@ systemctl --user start hermes-webui.service
 | バックアップが `Permission denied (publickey)` | OMV の `authorized_keys` と `BACKUP_SSH_KEY` のパスを確認 |
 | バックアップ timer が動かない | `systemctl --user list-timers hermes-backup.timer` と `loginctl enable-linger "$USER"` を確認 |
 
-`UserNS=keep-id` はホスト UID をコンテナ内の同一 UID に割り当てます。
-`HERMES_UID` / `WANTED_UID` を必ずホスト UID に合わせてください。
+`hermes-agent` は `UserNS=keep-id:uid=10000,gid=10000` で、ホスト UID をイメージ内
+`hermes` ユーザーの UID/GID（`10000`）にマップします。`hermes-webui` は plain な
+`UserNS=keep-id` でホスト UID をそのまま使います。両者とも共有ボリュームへの書き込みは
+ホスト UID（`WANTED_UID` / `WANTED_GID`）所有になります。

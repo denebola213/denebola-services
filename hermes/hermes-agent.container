@@ -14,9 +14,13 @@ EnvironmentFile=%h/hermes/hermes.env
 Environment=HERMES_HOME=/home/hermes/.hermes
 Environment=API_SERVER_ENABLED=true
 Environment=API_SERVER_HOST=0.0.0.0
-# rootless: map the host UID/GID to the same IDs inside the container so the
-# entrypoint's usermod/chown works and host files stay owned by you.
-UserNS=keep-id
+# rootless: map the HOST uid/gid onto the image's hermes uid/gid (10000).
+# Plain "keep-id" injects the host user at uid 1000, which collides with the
+# image's usermod -u HERMES_UID (uid already exists) and aborts stage2, leaving
+# hermes at 10000 so it cannot write the shared volume. Mapping to 10000 keeps
+# host-owned files while avoiding the collision. Set HERMES_UID/HERMES_GID=10000
+# in hermes.env (see hermes.env.example).
+UserNS=keep-id:uid=10000,gid=10000
 # Loopback only. The WebUI reaches the gateway over hermes.network.
 PublishPort=127.0.0.1:8642:8642
 AutoUpdate=registry
