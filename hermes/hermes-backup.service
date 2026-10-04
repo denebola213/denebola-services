@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up hermes volumes to OMV NAS over SFTP
+After=hermes-webui.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/hermes/backup.env
+ExecStart=%h/hermes/hermes-backup.sh

@@ -78,22 +78,29 @@ Quadlet ユニットを symlink にしておくと、以後は `git pull` と `d
 # このリポジトリのクローン先（どこでも可）。以下は repo 直下で実行する例。
 REPO="$(pwd)"
 
-mkdir -p ~/.config/containers/systemd ~/hermes ~/workspace
+mkdir -p ~/.config/containers/systemd ~/.config/systemd/user ~/hermes ~/workspace
 
 # Quadlet ユニット: リポジトリの実ファイルへ symlink（必ず絶対パスで貼る）
 ln -sf "$REPO"/hermes/*.network "$REPO"/hermes/*.volume "$REPO"/hermes/*.container \
     ~/.config/containers/systemd/
 
+# バックアップ用 systemd ユニット（Quadlet ではない通常の user ユニット）: symlink
+ln -sf "$REPO"/hermes/hermes-backup.service "$REPO"/hermes/hermes-backup.timer \
+    ~/.config/systemd/user/
+ln -sf "$REPO"/hermes/hermes-backup.sh ~/hermes/hermes-backup.sh
+
 # 環境ファイル: コピー
-cp hermes/hermes.env.example     ~/hermes/hermes.env
+cp hermes/hermes.env.example      ~/hermes/hermes.env
 cp hermes/cloudflared.env.example ~/hermes/cloudflared.env
-chmod 600 ~/hermes/hermes.env ~/hermes/cloudflared.env
+cp hermes/backup.env.example      ~/hermes/backup.env
+chmod 600 ~/hermes/hermes.env ~/hermes/cloudflared.env ~/hermes/backup.env
 ```
 
 - symlink は絶対パスで作成します。壊れた相対 symlink は Quadlet generator が
   読み飛ばすため、`cp` で上書きせず symlink のまま維持してください。
 - `git pull` でユニットを更新したら、`systemctl --user daemon-reload` を実行して
   生成ユニットを再作成します（generator は `daemon-reload` 時にのみ走ります）。
+- バックアップの詳細と接続情報は第 8 章を参照。
 
 ### 3.2 環境ファイルを編集
 
@@ -293,6 +300,11 @@ systemctl --user restart hermes-webui.service
 systemctl --user stop cloudflared.service
 journalctl --user -u hermes-agent.service -f
 
+# バックアップ（第 8 章）
+systemctl --user start hermes-backup.service
+systemctl --user list-timers hermes-backup.timer
+journalctl --user -u hermes-backup.service -f
+
 # イメージの自動更新（AutoUpdate=registry を付けている場合）
 podman auto-update
 systemctl --user enable --now podman-auto-update.timer
@@ -310,7 +322,92 @@ systemctl --user enable --now podman-auto-update.timer
 
 ---
 
-## 8. トラブルシューティング
+## 8. バックアップ（SFTP・日次 4:00）
+
+`hermes-home` ボリュームと `~/workspace` を gzip アーカイブにして OMV の NAS へ
+SFTP で転送します。`hermes-backup.timer` が毎日 04:00 に
+`hermes-backup.service` を起動し、既定で 14 日分を保持します。
+
+- 対象: `hermes-home`（config / sessions / skills / memory / webui state）、`~/workspace`
+- 対象外: `hermes-agent-src`（イメージから再生成可）、秘密の env（変更時に別途退避）
+- 転送: `podman volume export | gzip` と `tar -czf` を SFTP で NAS へ
+- 一貫性: 実行中だけ WebUI / agent を停止（webui 起動で agent も連鎖復帰）
+
+### 8.1 OMV 側の準備
+
+1. **Services > SSH** を有効化。
+2. 専用ユーザ（例 `backup`）を作成し、データディスク上の退避先フォルダへ
+   書込権限を付与。
+3. そのユーザに FCOS の公開鍵を登録（**Users > SSH public keys**）。
+4. 退避先の絶対パスを控える（例
+   `/srv/dev-disk-by-uuid-<UUID>/backup/hermes`）。
+
+### 8.2 FCOS 側の準備
+
+```bash
+# 鍵生成（未作成なら）。公開鍵は OMV の backup ユーザへ登録する。
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ''
+
+# ホスト鍵を登録（初回のみ）
+ssh-keyscan omv.local >> ~/.ssh/known_hosts
+```
+
+`~/hermes/backup.env` を編集して接続情報を設定します:
+
+```bash
+BACKUP_SFTP_HOST=omv.local
+BACKUP_SFTP_PORT=22
+BACKUP_SFTP_USER=backup
+BACKUP_SFTP_PATH=/srv/dev-disk-by-uuid-<UUID>/backup/hermes
+BACKUP_SSH_KEY=%h/.ssh/id_ed25519
+BACKUP_KEEP_DAYS=14
+```
+
+`BACKUP_SSH_KEY` の `%h` はホームディレクトリに展開されます。
+
+### 8.3 有効化とテスト
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now hermes-backup.timer
+
+# 手動テスト（WebUI が数秒停止します）
+systemctl --user start hermes-backup.service
+journalctl --user -u hermes-backup.service -f
+
+systemctl --user list-timers hermes-backup.timer
+```
+
+NAS 側に `hermes-home-YYYY-MM-DD.tar.gz` と `workspace-YYYY-MM-DD.tar.gz` が
+できていれば成功です。
+
+### 8.4 復元
+
+```bash
+systemctl --user stop hermes-webui.service hermes-agent.service
+
+# NAS からアーカイブを取得して展開
+sftp backup@omv.local:/srv/dev-disk-by-uuid-<UUID>/backup/hermes/hermes-home-YYYY-MM-DD.tar.gz
+gunzip -c hermes-home-YYYY-MM-DD.tar.gz | podman volume import hermes-home -
+tar -C ~ -xzf workspace-YYYY-MM-DD.tar.gz
+
+# 秘密の env はパスワードマネージャ等から復元し、ユニットを再読込
+git pull && systemctl --user daemon-reload
+systemctl --user start hermes-webui.service
+```
+
+### 8.5 注意
+
+- バックアップ中は WebUI / agent を停止します。日次 04:00 を想定。
+- tar.gz は**平文**です。NAS 上の権限管理に注意し、必要なら OMV 側の
+  btrfs/ZFS スナップショットで世代を補強してください。
+- 保持日数は `BACKUP_KEEP_DAYS`。NAS 側は `-mtime` による削除のみ行います。
+- `hermes.env` / `cloudflared.env` / `.cloudflared` は日次に含めません。
+  変更したときだけ別途オフサイトへ退避してください。
+
+---
+
+## 9. トラブルシューティング
 
 | 症状 | 対処 |
 |---|---|
@@ -322,6 +419,9 @@ systemctl --user enable --now podman-auto-update.timer
 | 再起動後に立ち上がらない | `loginctl enable-linger "$USER"` を実行 |
 | 初回 pull がタイムアウト | `TimeoutStartSec=300`（設定済み）を延長 |
 | ワークスペースに書き込めない | `~/workspace` の所有者がホスト UID と一致しているか、`:Z`（SELinux）を確認 |
+| バックアップが `Host key verification failed` | `ssh-keyscan omv.local >> ~/.ssh/known_hosts` を実行 |
+| バックアップが `Permission denied (publickey)` | OMV の `authorized_keys` と `BACKUP_SSH_KEY` のパスを確認 |
+| バックアップ timer が動かない | `systemctl --user list-timers hermes-backup.timer` と `loginctl enable-linger "$USER"` を確認 |
 
 `UserNS=keep-id` はホスト UID をコンテナ内の同一 UID に割り当てます。
 `HERMES_UID` / `WANTED_UID` を必ずホスト UID に合わせてください。
