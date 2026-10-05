@@ -491,6 +491,7 @@ systemctl --user start hermes-webui.service
 | dashboard が `Refusing to bind dashboard to 0.0.0.0 ... no auth providers are registered` で起動しない | `HERMES_DASHBOARD_OIDC_ISSUER` / `..._CLIENT_ID` / `..._CLIENT_SECRET` を設定し、`self_hosted` が `plugins.disabled` に無いことを確認（非 loopback bind は認証必須・fail-closed） |
 | dashboard の `auth_providers` が空 | OIDC 3 値の設定漏れ、または `self_hosted` プラグイン無効化を確認（`/api/status` で確認） |
 | dashboard の OIDC ログインが `invalid_client` で失敗 | `HERMES_DASHBOARD_OIDC_CLIENT_SECRET` の不一致。Access の SaaS アプリ (OIDC) を確認 |
+| dashboard の OIDC ログインが `invalid_scope (Invalid scope: profile)` | Cloudflare の SaaS アプリで該当スコープを有効化、または `HERMES_DASHBOARD_OIDC_SCOPES` を `openid`(+`email`) に下げる |
 | dashboard の OIDC ログインが `redirect_uri` エラー | Cloudflare の Redirect URL を `<HERMES_DASHBOARD_PUBLIC_URL>/auth/callback` に一致させ、PKCE を有効化 |
 | dashboard が `403` / Host で弾かれる | `HERMES_DASHBOARD_PUBLIC_URL` をトンネルの公開 URL と完全一致させる |
 | dashboard が `Unable to reach origin service` | cloudflared の URL が `http://hermes-agent:9119` か確認（`podman exec cloudflared getent hosts hermes-agent`） |
@@ -563,14 +564,17 @@ Browser ──HTTPS──▶ Cloudflare Edge (Access self-hosted)
 1. Zero Trust → **Access controls > Applications > Create new application**。
 2. **SaaS application** を選び、Application 名（例 `hermes-dashboard`）を入力。
 3. 認証方式に **OIDC** を選択。
-4. **Redirect URLs** に `https://dashboard.example.com/auth/callback` を登録。
-5. **PKCE** を有効化。
-6. **Create** し、表示される次の 3 値を控える:
+4. **Scopes** で送信したい属性（`Email` / `Profile`、必要なら `Groups`）を選択。
+   Cloudflare はここで選んだスコープしか受け付けず、未選択のスコープを要求すると
+   `invalid_scope` になります。
+5. **Redirect URLs** に `https://dashboard.example.com/auth/callback` を登録。
+6. **PKCE** を有効化。
+7. **Create** し、表示される次の 3 値を控える:
    - **Client ID**: `<client-id>`
    - **Client secret**: `<client-secret>`
    - **Issuer**:
      `https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>`
-7. **Access policies** で許可ポリシーを設定（deny-by-default）。
+8. **Access policies** で許可ポリシーを設定（deny-by-default）。
 
 ### 10.5 FCOS: 環境ファイルと反映
 
@@ -611,6 +615,10 @@ OIDC 3 値が揃っているかを確認します（第 9 章）。
 
 - discovery は `{issuer}/.well-known/openid-configuration`。Issuer の末尾スラッシュ
   は許容されますが、`iss` が一致する必要があります。
+- `invalid_scope (Invalid scope: profile)` が出る場合は、Cloudflare の SaaS アプリ
+  の **Scopes** で該当スコープ（`Profile` など）を有効化するか、
+  `HERMES_DASHBOARD_OIDC_SCOPES` を `openid`（+ 有効化済みの `email`）に下げます。
+  未選択のスコープは要求できません。
 - トークン交換が `invalid_client` で失敗する場合は Client secret の不一致、
   `redirect_uri` エラーなら Redirect URL の不一致 or PKCE 未設定を確認します。
 - TLS 終端が cloudflared コンテナ（非 loopback）のため、`dashboard.public_url` と
