@@ -145,15 +145,17 @@ id -g   # WANTED_GID に入れる (hermes-webui 用)
   上記の hex / `token_urlsafe` が無難です。漏洩すると任意コマンド実行につながるため 256bit 相当を推奨。
 - `HERMES_WEBUI_PASSWORD` を設定（外部公開では必須）。
 - `HERMES_WEBUI_ALLOWED_ORIGINS` に公開ホスト名（例 `https://hermes.example.com`）。
-- `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD` を設定。
-  agent コンテナは `HERMES_DASHBOARD=1` / `HERMES_DASHBOARD_HOST=0.0.0.0` で
-  Web Dashboard を有効化するため、**非 loopback bind の認証ゲート**が必ず有効になります。
-  プロバイダ未設定だとダッシュボードは fail-closed で起動しないので必須です。
-- `HERMES_DASHBOARD_BASIC_AUTH_SECRET` に 32 byte 以上のランダム値
-  （`openssl rand -base64 32`）。固定しないと再起動のたびログアウトされます。
+- `HERMES_DASHBOARD_OIDC_ISSUER` / `HERMES_DASHBOARD_OIDC_CLIENT_ID` /
+  `HERMES_DASHBOARD_OIDC_CLIENT_SECRET` に Cloudflare Access の SaaS アプリ
+  (OIDC) の値を設定（第 10 章参照）。agent コンテナは
+  `HERMES_DASHBOARD=1` / `HERMES_DASHBOARD_HOST=0.0.0.0` で Web Dashboard を
+  有効化するため、**非 loopback bind の認証ゲート**が必ず有効になります。
+  OIDC 3 値が未設定だとダッシュボードは fail-closed で起動しないので必須です。
+  basic 認証は使わず、Cloudflare Access を認証の入口にします。
 - `HERMES_DASHBOARD_PUBLIC_URL` にダッシュボードの公開 URL（例
-  `https://dashboard.example.com`）。DNS リバインディング対策の Host / Origin
-  完全一致と、OAuth のコールバック URL に使われます。
+  `https://dashboard.example.com`）。OAuth の redirect URI と、DNS リバインディング
+  対策の Host / Origin 完全一致に使われます。Redirect URL は
+  `<HERMES_DASHBOARD_PUBLIC_URL>/auth/callback` です。
 
 `~/hermes/cloudflared.env`:
 
@@ -169,7 +171,8 @@ id -g   # WANTED_GID に入れる (hermes-webui 用)
    - Agent API（CLI/API 用・任意）: `agent.example.com` → Service `HTTP` → URL `hermes-agent:8642`
      （cloudflared は `hermes` ネットワーク上にいるため、コンテナ名で名前解決できます）
 4. 必要なら **Access** ポリシーでメール OTP 等を追加（WebUI パスワードと二重防御）。
-   Dashboard は Basic 認証、Agent API を公開する場合は Access での保護を強く推奨（第 6 章）。
+   Dashboard は 3.3 の Access（前段）+ Hermes 側の OIDC で保護、Agent API を
+   公開する場合は Access での保護を強く推奨（第 6 章）。
 5. トークンを入手したら保存し、環境ファイルに反映。
 
 ### 3.4 起動
@@ -271,42 +274,20 @@ curl・OpenAI SDK・Open WebUI・各種 CLI クライアント向けの
 config / API キー / Skills / MCP / Logs / Analytics / Cron / プロファイルなどを
 ブラウザから管理できます。
 
-非 loopback bind のため**認証ゲートが常時有効**です。3.2 の
-`HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `..._PASSWORD` / `..._SECRET` を
-設定しないと fail-closed で起動しません。
+非 loopback bind のため**認証ゲートが常時有効**です。basic 認証は使わず、
+**Cloudflare Access を OIDC IdP として**使います（セットアップ手順は第 10 章）。
+ダッシュボードの hostname は前段の Access（self-hosted アプリ）で保護し、
+別に作成した Access の SaaS アプリ (OIDC) を Hermes の self-hosted OIDC
+provider から認証に使います。
 
-トークン方式: Zero Trust → **Networks > Tunnels** → 対象トンネル → **Public Hostname**:
+トンネルには Public Hostname を追加します（ローカル `config.yml` 方式は
+`cloudflared.config.example.yml` に記載済み）:
 
-- Subdomain / Domain: 例 `dashboard.example.com`
-- Service: `HTTP`
-- URL: `hermes-agent:9119`
+- `dashboard.example.com` → `http://hermes-agent:9119`
 
-ローカル `config.yml` 方式: ingress に追記（`cloudflared.config.example.yml` に記載済み）:
-
-```yaml
-  - hostname: dashboard.example.com
-    service: http://hermes-agent:9119
-```
-
-`HERMES_DASHBOARD_PUBLIC_URL` はトンネルに割り当てた公開 URL と一致させてください
-（Host / Origin の DNS リバインディング対策に使用）。
-
-ローカル確認（公開前の切り分け）:
-
-```bash
-curl -fsS http://127.0.0.1:9119/api/status | jq '.auth_required, .auth_providers'
-# => true
-# => ["basic"]
-```
-
-`auth_required: true` と `["basic"]` が返れば認証ゲート有効。ブラウザで
-`https://dashboard.example.com` を開き、Basic 認証でログインします。
-
-> TLS 終端が cloudflared コンテナ（非 loopback）のため、`dashboard.public_url` と
-> 併せて `dashboard.trusted_proxies` に cloudflared の IP を入れると
-> `X-Forwarded-Proto` を信頼し、Cookie に `Secure` を付与できます。IP は
-> `podman inspect cloudflared | jq '.[].NetworkSettings.Networks'` で確認し、
-> `hermes-home` ボリューム内の `config.yaml` に記載します（任意の強化）。
+`HERMES_DASHBOARD_PUBLIC_URL` を公開 URL と完全一致させてください
+（OAuth の redirect URI と Host / Origin の DNS リバインディング対策に使用）。
+確認と詳細は「10. Web Dashboard を Cloudflare Access (OIDC) で保護する」を参照。
 
 ### Agent API のルート追加
 
@@ -375,8 +356,10 @@ GATEWAY_PROXY_KEY=<API_SERVER_KEY>
   可能なら特定 IP に限定してください。
 - Hermes Desktop の Remote Gateway は 8642 ではなく dashboard 側（9119）です。
   本構成では有効化済みなので、Desktop の **Settings → Gateways → Remote gateway** に
-  `https://dashboard.example.com` と Basic 認証情報を入力します（第 6 章の
-  「Web Dashboard」参照）。
+  `https://dashboard.example.com` を入力します（第 10 章参照）。
+  Desktop は dashboard の OIDC ログインを利用しますが、前段の Cloudflare Access が
+  非ブラウザの API プローブを HTML リダイレクトで返すため、Desktop からは
+  接続できないことがあります（既知の制約）。
 
 ---
 
@@ -505,8 +488,10 @@ systemctl --user start hermes-webui.service
 | agent が `usermod: UID '1000' already exists` で crash loop | `HERMES_UID` / `HERMES_GID` が `10000`、agent が `UserNS=keep-id:uid=10000,gid=10000` か確認 |
 | cloudflared が数秒ごとに再起動 | 依存元の agent / webui が落ちていないか `systemctl --user status hermes-agent.service` を確認（`Requires` 連鎖） |
 | WebUI が `Gateway endpoint not reachable` | `API_SERVER_KEY` を 16 文字以上で設定し、`HERMES_WEBUI_GATEWAY_API_KEY` と同一にする |
-| dashboard が `Refusing to bind dashboard to 0.0.0.0 ... no auth providers are registered` で起動しない | `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` / `..._PASSWORD` を設定（非 loopback bind は認証必須・fail-closed） |
-| dashboard が再起動のたびログアウトする | `HERMES_DASHBOARD_BASIC_AUTH_SECRET` を 32 byte 以上で固定 |
+| dashboard が `Refusing to bind dashboard to 0.0.0.0 ... no auth providers are registered` で起動しない | `HERMES_DASHBOARD_OIDC_ISSUER` / `..._CLIENT_ID` / `..._CLIENT_SECRET` を設定し、`self_hosted` が `plugins.disabled` に無いことを確認（非 loopback bind は認証必須・fail-closed） |
+| dashboard の `auth_providers` が空 | OIDC 3 値の設定漏れ、または `self_hosted` プラグイン無効化を確認（`/api/status` で確認） |
+| dashboard の OIDC ログインが `invalid_client` で失敗 | `HERMES_DASHBOARD_OIDC_CLIENT_SECRET` の不一致。Access の SaaS アプリ (OIDC) を確認 |
+| dashboard の OIDC ログインが `redirect_uri` エラー | Cloudflare の Redirect URL を `<HERMES_DASHBOARD_PUBLIC_URL>/auth/callback` に一致させ、PKCE を有効化 |
 | dashboard が `403` / Host で弾かれる | `HERMES_DASHBOARD_PUBLIC_URL` をトンネルの公開 URL と完全一致させる |
 | dashboard が `Unable to reach origin service` | cloudflared の URL が `http://hermes-agent:9119` か確認（`podman exec cloudflared getent hosts hermes-agent`） |
 | トンネルが origin に到達できない | `cloudflared` が `hermes.network` に参加しているか、URL が `http://hermes-webui:8787` か確認 |
@@ -523,3 +508,114 @@ systemctl --user start hermes-webui.service
 `hermes` ユーザーの UID/GID（`10000`）にマップします。`hermes-webui` は plain な
 `UserNS=keep-id` でホスト UID をそのまま使います。両者とも共有ボリュームへの書き込みは
 ホスト UID（`WANTED_UID` / `WANTED_GID`）所有になります。
+
+---
+
+## 10. Web Dashboard を Cloudflare Access (OIDC) で保護する
+
+組み込み Web Dashboard（`hermes-agent:9119`）は非 loopback bind のため、Hermes
+自身の認証ゲートが必須です。ここでは **Cloudflare Access を OIDC IdP** として使い、
+basic 認証なしで運用するためのセットアップ手順をまとめます。
+
+### 10.1 構成
+
+- **前段**: Cloudflare Access の **self-hosted アプリ**が `dashboard.example.com`
+  への到達を保護（ネットワーク到達の制御）。
+- **認証**: 別に作成した Cloudflare Access の **SaaS アプリ (OIDC)** を IdP とし、
+  Hermes の self-hosted OIDC provider が認可コード + PKCE でログイン。
+- **経路**: Internet → Cloudflare Edge (Access) → cloudflared → hermes-agent:9119
+
+```text
+Browser ──HTTPS──▶ Cloudflare Edge (Access self-hosted)
+                          │ Tunnel
+                   cloudflared (hermes.network)
+                          │ http://hermes-agent:9119
+                   hermes-agent dashboard
+                          │ OIDC (auth code + PKCE)
+                          ▼
+              Cloudflare Access SaaS (OIDC IdP)
+```
+
+### 10.2 前提
+
+- Cloudflare アカウントで Zero Trust が有効。
+- Cloudflare Access に IdP（メール OTP・Google 等）を 1 つ以上登録済み。
+- `dashboard.example.com` をトンネルにルーティング済み（3.3）。
+- Hermes イメージが `HERMES_DASHBOARD_OIDC_CLIENT_SECRET` に対応
+  （2026-06-30 以降の `:latest`。PR #55344）。
+- `hermes-agent.container` は `HERMES_DASHBOARD=1` /
+  `HERMES_DASHBOARD_HOST=0.0.0.0` / `HERMES_DASHBOARD_PORT=9119` を設定済み
+  （このリポジトリの既定。変更不要）。
+
+### 10.3 Cloudflare: 前段の self-hosted アプリ
+
+1. Zero Trust → **Access controls > Applications > Create new application**。
+2. **Self-hosted and private** を選択し、Public hostname に
+   `dashboard.example.com` を追加。
+3. **Access policies** で許可ポリシー（例: 自分のメールアドレス）を作成。
+   Access は deny-by-default のため、許可ポリシーが必須。
+4. 認証に使う IdP を選択。単一 IdP なら **Apply instant authentication** を
+   有効化（Access ログインページを挟まず IdP へ直行）。
+5. **Save**。この時点でダッシュボードは Access の背後に入ります。
+
+### 10.4 Cloudflare: IdP になる SaaS アプリ (OIDC)
+
+1. Zero Trust → **Access controls > Applications > Create new application**。
+2. **SaaS application** を選び、Application 名（例 `hermes-dashboard`）を入力。
+3. 認証方式に **OIDC** を選択。
+4. **Redirect URLs** に `https://dashboard.example.com/auth/callback` を登録。
+5. **PKCE** を有効化。
+6. **Create** し、表示される次の 3 値を控える:
+   - **Client ID**: `<client-id>`
+   - **Client secret**: `<client-secret>`
+   - **Issuer**:
+     `https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>`
+7. **Access policies** で許可ポリシーを設定（deny-by-default）。
+
+### 10.5 FCOS: 環境ファイルと反映
+
+`~/hermes/hermes.env` に追記します（`hermes.env.example` の Dashboard 節にも
+同じ変数があります）:
+
+```bash
+HERMES_DASHBOARD_OIDC_ISSUER=https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>
+HERMES_DASHBOARD_OIDC_CLIENT_ID=<client-id>
+HERMES_DASHBOARD_OIDC_CLIENT_SECRET=<client-secret>
+HERMES_DASHBOARD_OIDC_SCOPES=openid profile email
+HERMES_DASHBOARD_PUBLIC_URL=https://dashboard.example.com
+```
+
+反映:
+
+```bash
+chmod 600 ~/hermes/hermes.env
+systemctl --user restart hermes-webui.service   # agent 連鎖再起動で dashboard も再起動
+```
+
+### 10.6 確認
+
+```bash
+curl -fsS http://127.0.0.1:9119/api/status | jq '.auth_required, .auth_providers'
+# => true
+# => ["self-hosted"]   (バージョンにより "self_hosted")
+```
+
+`auth_providers` が空の場合は、`self_hosted` が `plugins.disabled` に入っていないか、
+OIDC 3 値が揃っているかを確認します（第 9 章）。
+
+ブラウザで `https://dashboard.example.com` を開く → `/login` →
+**Sign in with Self-Hosted OIDC** → Cloudflare Access（既存セッションがあれば
+ほぼそのまま）→ ダッシュボード。
+
+### 10.7 注意
+
+- discovery は `{issuer}/.well-known/openid-configuration`。Issuer の末尾スラッシュ
+  は許容されますが、`iss` が一致する必要があります。
+- トークン交換が `invalid_client` で失敗する場合は Client secret の不一致、
+  `redirect_uri` エラーなら Redirect URL の不一致 or PKCE 未設定を確認します。
+- TLS 終端が cloudflared コンテナ（非 loopback）のため、`dashboard.public_url` と
+  併せて `dashboard.trusted_proxies` に cloudflared の IP を入れると
+  `X-Forwarded-Proto` を信頼し、Cookie に `Secure` を付与できます。IP は
+  `podman inspect cloudflared | jq '.[].NetworkSettings.Networks'` で確認し、
+  `hermes-home` ボリューム内の `config.yaml` に記載します（任意の強化）。
+- basic 認証は使わないため `HERMES_DASHBOARD_BASIC_AUTH_*` は設定しません。

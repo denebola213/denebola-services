@@ -15,8 +15,9 @@ Environment=HERMES_HOME=/home/hermes/.hermes
 Environment=API_SERVER_ENABLED=true
 Environment=API_SERVER_HOST=0.0.0.0
 # Built-in management dashboard, supervised by s6 next to the gateway.
-# Non-loopback bind engages the auth gate, so an auth provider
-# (HERMES_DASHBOARD_BASIC_AUTH_*) is required or the dashboard fails closed.
+# Non-loopback bind engages the auth gate; an auth provider (self-hosted
+# OIDC via HERMES_DASHBOARD_OIDC_*, see hermes.env.example) is required
+# or the dashboard fails closed.
 Environment=HERMES_DASHBOARD=1
 Environment=HERMES_DASHBOARD_HOST=0.0.0.0
 Environment=HERMES_DASHBOARD_PORT=9119
