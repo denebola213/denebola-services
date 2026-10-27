@@ -18,6 +18,12 @@ Environment=TZ=Asia/Tokyo
 # The image runs Trilium as node (uid/gid 1000). keep-id maps the host user onto
 # that uid so the bind-mounted data directory stays owned by the host user.
 UserNS=keep-id:uid=1000,gid=1000
+# Run as node directly. The stock start-docker.sh does `usermod`/`chown` then
+# `su node`, and `su` is not setuid in a rootless container ("su: must be suid
+# to work properly"). Skipping the wrapper and starting the server ourselves
+# avoids both the chown and the su; the entrypoint turns this into `node ./main.mjs`.
+User=1000:1000
+Exec=./main.mjs
 # Loopback only. cloudflared reaches Trilium over trilium.network.
 PublishPort=127.0.0.1:8080:8080
 

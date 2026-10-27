@@ -172,7 +172,8 @@ systemctl --user start trilium.service
    ```
 
 `v0.107.0` 以降は「コンテナを非 root で起動する」モードに対応します。
-rootless で `chown` 関連の失敗が出る場合は、その版へ上げると解消する可能性があります。
+本構成は `User=1000:1000` + `Exec=./main.mjs` で既に非 root 起動しているため、
+更新時にこの上書きを外せるかは release notes を確認してください。
 
 ---
 
@@ -180,6 +181,7 @@ rootless で `chown` 関連の失敗が出る場合は、その版へ上げる�
 
 | 症状 | 対処 |
 | --- | --- |
+| ログに `su: must be suid to work properly` が出て再起動を繰り返す | rootless ではイメージ既定の `start-docker.sh` が動かない。ユニットの `User=1000:1000` + `Exec=./main.mjs` で回避する（本リポジトリは設定済み） |
 | `Unit trilium.service not found` | Quadlet の構文エラー。`podman-system-generator --user --dryrun` で確認 |
 | 起動時に立ち上がらない | `loginctl enable-linger "$USER"` を実行したか確認 |
 | `permission denied` でデータを書けない | `~/trilium/data` がホストユーザー所有か、`:Z`（SELinux）が付いているか確認 |
