@@ -203,6 +203,9 @@ README だけの変更なら `daemon-reload` と再起動は不要です。
 | --- | --- |
 | ログに `su: must be suid to work properly` が出て再起動を繰り返す | rootless ではイメージ既定の `start-docker.sh` が動かない。ユニットの `User=1000:1000` + `Exec=./main.mjs` で回避する（本リポジトリは設定済み） |
 | `Unit trilium.service not found` | Quadlet の構文エラー。`podman-system-generator --user --dryrun` で確認 |
+| Public Hostname を追加したのに NXDOMAIN | トンネルがゾーンと別アカウント扱いだと CNAME が自動作成されない。`<TUNNEL_ID>.cfargotunnel.com` への CNAME（Proxied）を手動で作る |
+| 公開 URL が 200 で Access の 302 にならない | Access アプリ未作成。`curl -sI` に `location: https://<team>.cloudflareaccess.com/...` が出るのが正常 |
+| 公開 URL が 502 / 1033 | ingress の service が `http://trilium:8080` か、`trilium-cloudflared` が `trilium` ネットワークにいるか確認 |
 | 起動時に立ち上がらない | `loginctl enable-linger "$USER"` を実行したか確認 |
 | `permission denied` でデータを書けない | `~/trilium/data` がホストユーザー所有か、`:Z`（SELinux）が付いているか確認 |
 | 初回 pull がタイムアウト | `TimeoutStartSec=300`（設定済み）を延長 |
