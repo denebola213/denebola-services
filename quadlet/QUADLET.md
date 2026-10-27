@@ -41,6 +41,23 @@ cp quadlet/*.network quadlet/*.volume quadlet/*.container \
    ~/.config/containers/systemd/
 ```
 
+### ユニット名は必ず一意にする
+
+Quadlet は**ファイル名**からユニット名を作ります（`cloudflared.container` →
+`cloudflared.service`）。`ContainerName=` を変えてもユニット名は変わりません。
+複数サービスが同じファイル名を持つと、配置先で symlink が上書きされて
+片方のサービスが消えます（前のユニットを書き換えてしまった状態になります）。
+
+そのため、汎用的な名前は使わず `<サービス>-<役割>.container` にします。
+
+| 悪い例 | 良い例 |
+| --- | --- |
+| `hermes/cloudflared.container` | `hermes/hermes-cloudflared.container` |
+| `trilium/cloudflared.container` | `trilium/trilium-cloudflared.container` |
+| `db.container`（2 サービス目で衝突） | `trilium-db.container` |
+
+`ContainerName=` も同じ規則で揃えると `podman ps` で出所が分かります。
+
 ### `app.network`
 
 ```ini

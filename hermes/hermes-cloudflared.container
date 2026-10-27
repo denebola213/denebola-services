@@ -1,17 +1,17 @@
 [Unit]
-Description=Cloudflare Tunnel for Trilium (token-managed)
+Description=Cloudflare Tunnel for Hermes WebUI (token-managed)
 Wants=network-online.target
 After=network-online.target
-Requires=trilium.service
-After=trilium.service
+Requires=hermes-webui.service
+After=hermes-webui.service
 
 [Container]
-ContainerName=cloudflared-trilium
+ContainerName=hermes-cloudflared
 Image=docker.io/cloudflare/cloudflared:latest
-Network=trilium.network
+Network=hermes.network
 Exec=tunnel --no-autoupdate run
 # TUNNEL_TOKEN lives in this env file (never on the command line).
-EnvironmentFile=%h/trilium/cloudflared.env
+EnvironmentFile=%h/hermes/cloudflared.env
 AutoUpdate=registry
 
 [Service]

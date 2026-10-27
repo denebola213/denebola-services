@@ -1,6 +1,6 @@
 # Trilium Notes を Cloudflare Tunnel で公開（Podman Quadlet / rootless）
 
-`triliumnext/trilium` を Podman Quadlet で常駐させ、`cloudflared` コンテナから
+`triliumnext/trilium` を Podman Quadlet で常駐させ、`trilium-cloudflared` コンテナから
 Cloudflare Tunnel 経由で外部公開する構成です。インバウンドポートを開けずに、
 個人用ナレッジベースを HTTPS のホスト名で利用できます。
 
@@ -11,7 +11,7 @@ Cloudflare Tunnel 経由で外部公開する構成です。インバウンド�
                         └─────────┬──────────┘
                                   │ Tunnel (outbound のみ)
                         ┌─────────▼──────────┐
-                        │ cloudflared-trilium│  trilium.network
+                        │ trilium-cloudflared│  trilium.network
                         └─────────┬──────────┘
                                   │ http://trilium:8080
                         ┌─────────▼──────────┐
@@ -35,7 +35,7 @@ Cloudflare Tunnel 経由で外部公開する構成です。インバウンド�
 | --- | --- |
 | `trilium.network` | サービス用 Podman ネットワーク |
 | `trilium.container` | Trilium 本体（loopback バインド、イメージはバージョン固定） |
-| `cloudflared.container` | このサービス専用の Cloudflare Tunnel |
+| `trilium-cloudflared.container` | このサービス専用の Cloudflare Tunnel |
 | `cloudflared.env.example` | `TUNNEL_TOKEN` の雛形（実ファイルは git 管理外） |
 
 ---
@@ -77,7 +77,7 @@ mkdir -p ~/.config/containers/systemd
 
 ln -sf "$REPO"/trilium/trilium.network \
        "$REPO"/trilium/trilium.container \
-       "$REPO"/trilium/cloudflared.container \
+       "$REPO"/trilium/trilium-cloudflared.container \
        ~/.config/containers/systemd/
 
 cp trilium/cloudflared.env.example ~/trilium/cloudflared.env
@@ -113,14 +113,18 @@ systemctl --user start trilium.service
 ```
 
 `[Install] WantedBy=default.target` があるため `enable` は不要です。
-`trilium.service` の起動で `cloudflared.service` も連鎖起動します。
+`trilium.service` の起動で `trilium-cloudflared.service` も連鎖起動します。
+
+ユニット名は Quadlet が**ファイル名**から生成するため、`cloudflared.container` のような
+汎用名は使わず `<サービス>-cloudflared.container` にしています
+（`hermes-cloudflared` と衝突させないため）。
 
 ---
 
 ## 4. 確認
 
 ```bash
-systemctl --user status trilium.service cloudflared.service
+systemctl --user status trilium.service trilium-cloudflared.service
 journalctl --user -u trilium.service -f
 
 # ローカル確認（公開前の切り分け）
@@ -172,7 +176,24 @@ systemctl --user start trilium.service
    ```
 
 `v0.107.0` 以降は「コンテナを非 root で起動する」モードに対応します。
-rootless で `chown` 関連の失敗が出る場合は、その版へ上げると解消する可能性があります。
+本構成は `User=1000:1000` + `Exec=./main.mjs` で既に非 root 起動しているため、
+更新時にこの上書きを外せるかは release notes を確認してください。
+
+### リポジトリ経由の更新フロー
+
+ホスト側は `~/denebola-services` を clone し、ユニットをそこへ symlink しておきます（3.2）。
+以後は次の 3 行で完結します。
+
+```bash
+cd ~/denebola-services
+git pull
+systemctl --user daemon-reload
+systemctl --user restart trilium.service
+```
+
+`.container` / `.network` を変更したときは `daemon-reload` が必須です
+（Quadlet generator は `daemon-reload` のときだけ走ります）。
+README だけの変更なら `daemon-reload` と再起動は不要です。
 
 ---
 
@@ -180,12 +201,13 @@ rootless で `chown` 関連の失敗が出る場合は、その版へ上げる�
 
 | 症状 | 対処 |
 | --- | --- |
+| ログに `su: must be suid to work properly` が出て再起動を繰り返す | rootless ではイメージ既定の `start-docker.sh` が動かない。ユニットの `User=1000:1000` + `Exec=./main.mjs` で回避する（本リポジトリは設定済み） |
 | `Unit trilium.service not found` | Quadlet の構文エラー。`podman-system-generator --user --dryrun` で確認 |
 | 起動時に立ち上がらない | `loginctl enable-linger "$USER"` を実行したか確認 |
 | `permission denied` でデータを書けない | `~/trilium/data` がホストユーザー所有か、`:Z`（SELinux）が付いているか確認 |
 | 初回 pull がタイムアウト | `TimeoutStartSec=300`（設定済み）を延長 |
 | トンネルが `Unable to reach origin service` | cloudflared が `trilium.network` に参加しているか、URL が `trilium:8080` か確認 |
-| 公開 URL で Access ログイン後に 502 | コンテナ名の解決を確認: `podman exec cloudflared-trilium getent hosts trilium` |
+| 公開 URL で Access ログイン後に 502 | コンテナ名の解決を確認: `podman exec trilium-cloudflared getent hosts trilium` |
 | Access を外したら誰でも開ける | 仕様。Trilium 側のログインを必ず残す |
 | SQLite が壊れた | 停止状態のバックアップから戻す。稼働中コピーは避ける |
 
