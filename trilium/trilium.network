@@ -1,0 +1,8 @@
+[Unit]
+Description=Trilium shared network
+
+[Network]
+NetworkName=trilium
+
+[Install]
+WantedBy=default.target

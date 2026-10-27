@@ -11,6 +11,8 @@ fcos/config.ign
 # ==== secrets / local environment files ====
 hermes/*.env
 !hermes/*.env.example
+trilium/*.env
+!trilium/*.env.example
 hermes/cloudflared/
 *.key
 *.pem
