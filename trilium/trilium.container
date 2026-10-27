@@ -2,9 +2,9 @@
 Description=Trilium Notes (rootless, loopback only)
 Wants=network-online.target
 After=network-online.target
-# Starting Trilium also brings up its tunnel. cloudflared keeps its own
+# Starting Trilium also brings up its tunnel. trilium-cloudflared keeps its own
 # Requires=trilium.service so stopping Trilium stops the tunnel too.
-Wants=cloudflared.service
+Wants=trilium-cloudflared.service
 
 [Container]
 ContainerName=trilium

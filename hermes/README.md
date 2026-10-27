@@ -13,7 +13,7 @@ Cloudflare Tunnel 経由で外部公開する構成です。
                         └─────────┬──────────┘
                                   │ Tunnel (outbound のみ)
                         ┌─────────▼──────────┐
-                        │ cloudflared        │  hermes.network
+                        │ hermes-cloudflared │  hermes.network
                         └──┬────────┬────────┘
       http://hermes-webui:8787 │  │ http://hermes-agent:9119  (dashboard)
       http://hermes-agent:8642 │  │ (gateway API, 任意)
@@ -51,7 +51,7 @@ Cloudflare Tunnel 経由で外部公開する構成です。
 | 設定のコード管理 | 不可（Cloudflare 側） | 可（git 管理しやすい） |
 | 向いているケース | 手軽に公開したい / 設定をダッシュボードで変更したい | IaC・再現性・オフライン管理を重視 |
 
-このリポジトリの既定は **トークン方式**（`cloudflared.container`）。
+このリポジトリの既定は **トークン方式**（`hermes-cloudflared.container`）。
 ローカル方式へ切り替えたい場合は「5. ローカル config.yml 方式に切り替える」を参照。
 
 ---
@@ -123,7 +123,7 @@ id -g   # WANTED_GID に入れる (hermes-webui 用)
   でホスト UID を 10000 にマップするため、ここをホスト UID にしてはいけません。
   ホスト UID を入れるとコンテナ内にホストユーザーが同 UID で注入され、
   `usermod: UID already exists` で agent の起動フックが失敗し、crash loop →
-  依存する webui / cloudflared も連鎖再起動します。
+  依存する webui / hermes-cloudflared も連鎖再起動します。
 - `API_SERVER_KEY` と `HERMES_WEBUI_GATEWAY_API_KEY` を **同じ長いランダム文字列**（16 文字以上）に。
   1 回だけ生成して両方へ同じ値を貼り付けます:
 
@@ -183,7 +183,7 @@ systemctl --user daemon-reload
 # 生成されるユニットを事前確認
 /usr/lib/systemd/system-generators/podman-system-generator --user --dryrun
 
-systemctl --user start hermes-webui.service   # 依存から agent / cloudflared も起動
+systemctl --user start hermes-webui.service   # 依存から agent / hermes-cloudflared も起動
 ```
 
 `[Install] WantedBy=default.target` があるため、`enable` は不要（生成ユニットは
@@ -194,7 +194,7 @@ systemctl --user start hermes-webui.service   # 依存から agent / cloudflared
 ## 4. 確認
 
 ```bash
-systemctl --user status hermes-agent.service hermes-webui.service cloudflared.service
+systemctl --user status hermes-agent.service hermes-webui.service hermes-cloudflared.service
 journalctl --user -u hermes-webui.service -f
 
 # ローカル確認（公開前の切り分け）
@@ -209,9 +209,9 @@ curl -fsS https://agent.example.com/health       # API を公開した場合
 curl -I https://dashboard.example.com            # Dashboard を公開した場合（401/302 でログインへ）
 ```
 
-WebUI が外部から開けない場合は `cloudflared` のログで
+WebUI が外部から開けない場合は `hermes-cloudflared` のログで
 `Unable to reach origin service` が出ていないか確認します。コンテナ名
-`hermes-webui` が解決できているか、`podman exec cloudflared \
+`hermes-webui` が解決できているか、`podman exec hermes-cloudflared \
 getent hosts hermes-webui` で確認できます。
 
 ---
@@ -237,12 +237,12 @@ getent hosts hermes-webui` で確認できます。
    # credentials JSON は ~/.cloudflared/<TUNNEL-UUID>.json にある
    ```
 
-3. `~/.config/containers/systemd/cloudflared.container` を次のように変更
+3. `~/.config/containers/systemd/hermes-cloudflared.container` を次のように変更
    （`Exec` と `Volume` を差し替え、`EnvironmentFile` 行は削除）:
 
    ```ini
    [Container]
-   ContainerName=cloudflared
+   ContainerName=hermes-cloudflared
    Image=docker.io/cloudflare/cloudflared:latest
    Network=hermes.network
    Exec=--no-autoupdate --config /etc/cloudflared/config.yml tunnel run
@@ -255,7 +255,7 @@ getent hosts hermes-webui` で確認できます。
 
    ```bash
    systemctl --user daemon-reload
-   systemctl --user restart cloudflared.service
+   systemctl --user restart hermes-cloudflared.service
    ```
 
 ---
@@ -370,7 +370,7 @@ GATEWAY_PROXY_KEY=<API_SERVER_KEY>
 git -C <リポジトリ> pull && systemctl --user daemon-reload
 
 systemctl --user restart hermes-webui.service
-systemctl --user stop cloudflared.service
+systemctl --user stop hermes-cloudflared.service
 journalctl --user -u hermes-agent.service -f
 
 # バックアップ（第 8 章）
@@ -494,7 +494,7 @@ systemctl --user start hermes-webui.service
 | dashboard の OIDC ログインが `invalid_scope (Invalid scope: profile)` | Cloudflare の SaaS アプリで該当スコープを有効化、または `HERMES_DASHBOARD_OIDC_SCOPES` を `openid`(+`email`) に下げる |
 | dashboard の OIDC ログインが `redirect_uri` エラー | Cloudflare の Redirect URL を `<HERMES_DASHBOARD_PUBLIC_URL>/auth/callback` に一致させ、PKCE を有効化 |
 | dashboard が `403` / Host で弾かれる | `HERMES_DASHBOARD_PUBLIC_URL` をトンネルの公開 URL と完全一致させる |
-| dashboard が `Unable to reach origin service` | cloudflared の URL が `http://hermes-agent:9119` か確認（`podman exec cloudflared getent hosts hermes-agent`） |
+| dashboard が `Unable to reach origin service` | cloudflared の URL が `http://hermes-agent:9119` か確認（`podman exec hermes-cloudflared getent hosts hermes-agent`） |
 | トンネルが origin に到達できない | `cloudflared` が `hermes.network` に参加しているか、URL が `http://hermes-webui:8787` か確認 |
 | ログイン後にリダイレクトループ | `HERMES_WEBUI_ALLOWED_ORIGINS` と `*_TRUST_FORWARDED_*` の設定を確認 |
 | `Unit hermes-webui.service not found` | Quadlet の構文エラー。`podman-system-generator --user --dryrun` で確認 |
@@ -529,7 +529,7 @@ basic 認証なしで運用するためのセットアップ手順をまとめ�
 ```text
 Browser ──HTTPS──▶ Cloudflare Edge (Access self-hosted)
                           │ Tunnel
-                   cloudflared (hermes.network)
+                   hermes-cloudflared (hermes.network)
                           │ http://hermes-agent:9119
                    hermes-agent dashboard
                           │ OIDC (auth code + PKCE)
@@ -624,6 +624,6 @@ OIDC 3 値が揃っているかを確認します（第 9 章）。
 - TLS 終端が cloudflared コンテナ（非 loopback）のため、`dashboard.public_url` と
   併せて `dashboard.trusted_proxies` に cloudflared の IP を入れると
   `X-Forwarded-Proto` を信頼し、Cookie に `Secure` を付与できます。IP は
-  `podman inspect cloudflared | jq '.[].NetworkSettings.Networks'` で確認し、
+  `podman inspect hermes-cloudflared | jq '.[].NetworkSettings.Networks'` で確認し、
   `hermes-home` ボリューム内の `config.yaml` に記載します（任意の強化）。
 - basic 認証は使わないため `HERMES_DASHBOARD_BASIC_AUTH_*` は設定しません。
