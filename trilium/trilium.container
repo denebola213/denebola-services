@@ -1,0 +1,29 @@
+[Unit]
+Description=Trilium Notes (rootless, loopback only)
+Wants=network-online.target
+After=network-online.target
+# Starting Trilium also brings up its tunnel. cloudflared keeps its own
+# Requires=trilium.service so stopping Trilium stops the tunnel too.
+Wants=cloudflared.service
+
+[Container]
+ContainerName=trilium
+# Pinned on purpose: upstream warns that :latest can move to a new minor version
+# and break things. Bump this tag by hand (see the README upgrade section).
+Image=docker.io/triliumnext/trilium:v0.106.1
+Network=trilium.network
+# Data lives on the host, so backup is a plain directory copy.
+Volume=%h/trilium/data:/home/node/trilium-data:Z
+Environment=TZ=Asia/Tokyo
+# The image runs Trilium as node (uid/gid 1000). keep-id maps the host user onto
+# that uid so the bind-mounted data directory stays owned by the host user.
+UserNS=keep-id:uid=1000,gid=1000
+# Loopback only. cloudflared reaches Trilium over trilium.network.
+PublishPort=127.0.0.1:8080:8080
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

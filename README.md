@@ -8,6 +8,7 @@
 | [`fcos/`](fcos/README.md) | Fedora CoreOS のインストール（Butane / Ignition） |
 | [`quadlet/`](quadlet/QUADLET.md) | Podman Quadlet の導入手順 |
 | [`hermes/`](hermes/README.md) | Hermes Agent + WebUI + Dashboard の Cloudflare Tunnel 公開構成 |
+| [`trilium/`](trilium/README.md) | Trilium Notes を Cloudflare Tunnel で公開する rootless Quadlet 構成 |
 
 ## Markdown lint
 
