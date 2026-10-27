@@ -175,6 +175,22 @@ systemctl --user start trilium.service
 本構成は `User=1000:1000` + `Exec=./main.mjs` で既に非 root 起動しているため、
 更新時にこの上書きを外せるかは release notes を確認してください。
 
+### リポジトリ経由の更新フロー
+
+ホスト側は `~/denebola-services` を clone し、ユニットをそこへ symlink しておきます（3.2）。
+以後は次の 3 行で完結します。
+
+```bash
+cd ~/denebola-services
+git pull
+systemctl --user daemon-reload
+systemctl --user restart trilium.service
+```
+
+`.container` / `.network` を変更したときは `daemon-reload` が必須です
+（Quadlet generator は `daemon-reload` のときだけ走ります）。
+README だけの変更なら `daemon-reload` と再起動は不要です。
+
 ---
 
 ## 7. トラブルシューティング
