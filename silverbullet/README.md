@@ -28,6 +28,7 @@ Internet ── HTTPS ──▶ Cloudflare Edge
 | `silverbullet-cloudflared.container` | 専用 Cloudflare Tunnel |
 | `silverbullet.env.example` | `SB_USER`（ログインフォームの認証情報）の雛形 |
 | `cloudflared.env.example` | `TUNNEL_TOKEN` の雛形 |
+| `space/STYLE.md` | space に置く Space Style（和文フォント・行間） |
 
 ユニット名は Quadlet が**ファイル名**から生成するため、`cloudflared.container` ではなく
 `silverbullet-cloudflared.container` にしています（他サービスと衝突させないため）。
@@ -61,6 +62,15 @@ chmod 600 ~/silverbullet/*.env
 `SB_USER` は `user:password` 形式で、**このファイルは必須**です（Quadlet は `EnvironmentFile=` の
 `-`（任意）指定に対応しておらず、無いと起動しません）。値を空にすると認証なしになり、
 Cloudflare Access を通れば誰でも編集できます。
+
+space 直下には `silverbullet/space/STYLE.md` をコピーしておく（任意だが推奨）。
+既定フォント `iA-Mono` は和文グリフを持たず、`system-ui` 経由だと簡体字フォントに落ちる環境がある。
+`STYLE.md` は欧文を OS の UI フォント、和文を和文専用ファミリに割り当て、行間も和文向けに広げる。
+反映はクライアントの `System: Reload`。
+
+```bash
+cp "$REPO"/silverbullet/space/STYLE.md ~/workspace/notes/STYLE.md
+```
 
 認証は **HTTP Basic ではなく、`/.auth` のログインフォーム**（Cookie セッション）です。
 `SB_USER` を変えたら `systemctl --user restart silverbullet.service` で反映されます。
