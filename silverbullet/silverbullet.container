@@ -1,0 +1,40 @@
+[Unit]
+Description=SilverBullet (rootless, loopback only)
+Wants=network-online.target
+After=network-online.target
+# Starting SilverBullet also brings up its tunnel. silverbullet-cloudflared keeps
+# its own Requires=silverbullet.service so stopping the app stops the tunnel too.
+Wants=silverbullet-cloudflared.service
+
+[Container]
+ContainerName=silverbullet
+# Pinned for the evaluation period. Bump by hand (see the README upgrade section).
+Image=ghcr.io/silverbulletmd/silverbullet:2.12.1
+Network=silverbullet.network
+# The space is a plain markdown directory. For the side-by-side comparison this
+# points at the LLM wiki, so both apps read the same notes.
+Volume=%h/workspace/wiki:/data:Z
+Environment=SB_FOLDER=/data
+Environment=TZ=Asia/Tokyo
+# silverbullet syncs with git; git wants a writable HOME for its credential cache.
+Environment=HOME=/tmp
+# SB_USER (user:password) turns on basic auth. Optional so the unit starts even
+# before the file exists; set it before exposing the service (see the README).
+EnvironmentFile=-%h/silverbullet/silverbullet.env
+# keep-id maps the host user onto uid 1000 so files the app writes in /data stay
+# owned by the host user, not by a subuid.
+UserNS=keep-id:uid=1000,gid=1000
+# Run as uid 1000 directly. The stock entrypoint only creates a user and calls
+# `su` when it starts as root, and `su` is not setuid in a rootless container
+# ("su: must be suid to work properly"). With a non-root uid it execs the server
+# directly, so no chown and no su happen.
+User=1000:1000
+# Loopback only. cloudflared reaches SilverBullet over silverbullet.network.
+PublishPort=127.0.0.1:3000:3000
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

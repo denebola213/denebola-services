@@ -1,0 +1,8 @@
+[Unit]
+Description=SilverBullet shared network
+
+[Network]
+NetworkName=silverbullet
+
+[Install]
+WantedBy=default.target
