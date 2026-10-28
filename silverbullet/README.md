@@ -25,7 +25,7 @@ Internet ── HTTPS ──▶ Cloudflare Edge
 | `silverbullet.network` | サービス専用ネットワーク |
 | `silverbullet.container` | 本体（loopback バインド、タグ固定） |
 | `silverbullet-cloudflared.container` | 専用 Cloudflare Tunnel |
-| `silverbullet.env.example` | `SB_USER`（Basic 認証）の雛形 |
+| `silverbullet.env.example` | `SB_USER`（ログインフォームの認証情報）の雛形 |
 | `cloudflared.env.example` | `TUNNEL_TOKEN` の雛形 |
 
 ユニット名は Quadlet が**ファイル名**から生成するため、`cloudflared.container` ではなく
@@ -60,6 +60,10 @@ chmod 600 ~/silverbullet/*.env
 `SB_USER` は `user:password` 形式で、**このファイルは必須**です（Quadlet は `EnvironmentFile=` の
 `-`（任意）指定に対応しておらず、無いと起動しません）。値を空にすると認証なしになり、
 Cloudflare Access を通れば誰でも編集できます。
+
+認証は **HTTP Basic ではなく、`/.auth` のログインフォーム**（Cookie セッション）です。
+`SB_USER` を変えたら `systemctl --user restart silverbullet.service` で反映されます。
+なお初回起動時に space 直下へ `.silverbullet.auth.json`（認証状態、600）が作られます。
 
 ## 3. Cloudflare 側
 
@@ -106,7 +110,12 @@ systemctl --user is-active silverbullet.service silverbullet-cloudflared.service
 podman ps --filter name=silverbullet --format '{{.Names}} | {{.Status}} | {{.Ports}}'
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 ss -ltn | grep 3000                       # 127.0.0.1 のみか
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/.fs   # 認証ありなら 401
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/index.md   # 未認証なら 401
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/.auth       # ログインフォームは 200
+
+# 認証が通るか（Cookie が返れば成功）
+curl -s -D - -o /dev/null -X POST \
+  -d 'username=admin&password=********' http://127.0.0.1:3000/.auth | grep -i set-cookie
 ```
 
 公開 URL 側は `curl -sI https://sb.example.com/` が
