@@ -2,7 +2,8 @@
 
 `silverbulletmd/silverbullet` を Podman Quadlet で常駐させ、`silverbullet-cloudflared`
 コンテナから Cloudflare Tunnel 経由で公開する構成です。Trilium との比較用に、
-**同じ Markdown ディレクトリ**（`~/workspace/wiki`）を space として読みます。
+**Trilium から書き出した Markdown**（`~/workspace/notes`）を space として読みます。
+`~/workspace/wiki`（LLM 用の wiki）とは別ディレクトリで、人間が読む文書だけを置きます。
 
 ```text
 Internet ── HTTPS ──▶ Cloudflare Edge
@@ -35,7 +36,7 @@ Internet ── HTTPS ──▶ Cloudflare Edge
 
 - Fedora CoreOS 上の rootless Podman（`loginctl enable-linger "$USER"` 済み）
 - `127.0.0.1:3000` が空いていること
-- space に使うディレクトリがホストユーザー所有であること（`~/workspace/wiki`）
+- space に使うディレクトリがホストユーザー所有であること（`~/workspace/notes`）
 
 ## 1. ユニットの配置
 
@@ -123,7 +124,7 @@ curl -s -D - -o /dev/null -X POST \
 
 ## 6. データとバックアップ
 
-space は Markdown ファイルそのもの（`~/workspace/wiki`）。DB も WAL も無いので、
+space は Markdown ファイルそのもの（`~/workspace/notes`）。DB も WAL も無いので、
 停止不要でそのままコピー・git 管理できます。Trilium と違い**バックアップはファイルコピーで十分**です。
 
 ## 7. アップグレード
