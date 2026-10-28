@@ -53,8 +53,8 @@ Quadlet は**ファイル名**からユニット名を作ります（`cloudflare
 | 悪い例 | 良い例 |
 | --- | --- |
 | `hermes/cloudflared.container` | `hermes/hermes-cloudflared.container` |
-| `trilium/cloudflared.container` | `trilium/trilium-cloudflared.container` |
-| `db.container`（2 サービス目で衝突） | `trilium-db.container` |
+| `silverbullet/cloudflared.container` | `silverbullet/silverbullet-cloudflared.container` |
+| `db.container`（2 サービス目で衝突） | `silverbullet-db.container` |
 
 `ContainerName=` も同じ規則で揃えると `podman ps` で出所が分かります。
 

@@ -1,8 +1,8 @@
 # SilverBullet を Cloudflare Tunnel で公開（Podman Quadlet / rootless）
 
 `silverbulletmd/silverbullet` を Podman Quadlet で常駐させ、`silverbullet-cloudflared`
-コンテナから Cloudflare Tunnel 経由で公開する構成です。Trilium との比較用に、
-**Trilium から書き出した Markdown**（`~/workspace/notes`）を space として読みます。
+コンテナから Cloudflare Tunnel 経由で公開する構成です。人向け文書の正本として
+`notes.st-albireo.net` で公開し、space には `~/workspace/notes` を使います。
 `~/workspace/wiki`（LLM 用の wiki）とは別ディレクトリで、人間が読む文書だけを置きます。
 
 ```text
@@ -70,14 +70,14 @@ Cloudflare Access を通れば誰でも編集できます。
 
 1. Zero Trust → Networks → Tunnels → トンネル作成 → トークンを
    `~/silverbullet/cloudflared.env` の `TUNNEL_TOKEN` に貼る。
-2. Public Hostname を追加（例 `sb.example.com`）:
+2. Public Hostname を追加（`notes.st-albireo.net`）:
 
    | 項目 | 値 |
    | --- | --- |
    | Type | `HTTP` |
    | URL | `silverbullet:3000` |
 
-3. Access → Applications で `sb.example.com` に Allow ポリシーを付ける。
+3. Access → Applications で `notes.st-albireo.net` に Allow ポリシーを付ける。
 
 トークン方式の ingress は Cloudflare 側の設定なので、変更しても cloudflared の再起動は不要です。
 Public Hostname を追加しても DNS の CNAME が作られない場合は、`<TUNNEL_ID>.cfargotunnel.com`
@@ -119,13 +119,17 @@ curl -s -D - -o /dev/null -X POST \
   -d 'username=admin&password=********' http://127.0.0.1:3000/.auth | grep -i set-cookie
 ```
 
-公開 URL 側は `curl -sI https://sb.example.com/` が
+公開 URL 側は `curl -sI https://notes.st-albireo.net/` が
 `location: https://<team>.cloudflareaccess.com/...` を返せば Access 有効です。
 
 ## 6. データとバックアップ
 
 space は Markdown ファイルそのもの（`~/workspace/notes`）。DB も WAL も無いので、
-停止不要でそのままコピー・git 管理できます。Trilium と違い**バックアップはファイルコピーで十分**です。
+停止不要でそのままコピー・git 管理できます。**バックアップはファイルコピーで十分**です。
+
+`.silverbullet.auth.json`（認証状態と salt）も space に属するため、**space を移すときは一緒に
+持っていく**こと。無い状態で作り直すと salt が変わり、ブラウザ側の暗号化キャッシュと
+鍵が合わなくなる。
 
 ## 7. アップグレード
 
@@ -136,20 +140,15 @@ sed -i 's/silverbullet:2\.12\.1/silverbullet:X.Y.Z/' ~/denebola-services/silverb
 systemctl --user daemon-reload && systemctl --user restart silverbullet.service
 ```
 
-## 8. Trilium との比較観点
+## 8. Trilium からの移行
 
-| 観点 | SilverBullet | Trilium |
-| --- | --- | --- |
-| データ形式 | Markdown ファイル（外部エディタ・git 可） | SQLite（アプリ内で完結） |
-| 人物の編集 | エディタ的（ライブプレビュー、`[[link]]`） | ノートツリー（リッチ、子ノート構造） |
-| クリッパー | 公式なし（ブックマークレット等で代替） | 公式（全文・スクショ・`clipperInbox`） |
-| API | HTTP（`/.fs` 等）、Space Lua | ETAPI（REST、`/etapi/*`） |
-| AI/MCP | なし（Space Lua で自作） | 内蔵 MCP + 複数プロバイダ |
-| モバイル | PWA（オフライン可） | PWA（オフライン不可） |
-| バックアップ | ファイルコピー | 停止 or 組み込みバックアップ |
+旧構成（`trilium/` と Trilium 用トンネル）は廃止し、本構成に一本化した。文書は Trilium から
+ETAPI で一度だけ書き出して space に置いている。
 
-同じ space を両方から開けるので、**編集はどちらか一方に決める**のが安全です
-（同時に開いて保存すると後勝ちになります）。
+- 書き出し: `GET /etapi/notes/{noteId}/export?format=markdown`（サブツリーを ZIP で返す）
+- 展開後に `Hermes/` を外し、拡張子なし／`.txt` を `.md` に揃える
+  （SilverBullet は `.md` しかページ化しない）
+- 以降は SilverBullet 側が正本。Trilium との同期は無く、`~/trilium/data`（SQLite）は控えとして残している
 
 ## 9. トラブルシューティング
 
@@ -162,3 +161,5 @@ systemctl --user daemon-reload && systemctl --user restart silverbullet.service
 | 公開 URL が 200 で Access の 302 にならない | Access アプリ未作成。origin がそのまま露出している |
 | `parsing file ".../-/path/to.env"` で起動失敗 | Quadlet は `EnvironmentFile=-`（任意指定）を解釈せず、`-` がパス扱いになる。`-` を外し、ファイルを先に作る |
 | 設定が反映されない | `.container` を変えたら `systemctl --user daemon-reload` が必要 |
+| ログインで `This key does not match an existing local cache` | ブラウザのその origin のローカルデータを消す（DevTools → Application → Clear site data）。space を移すと `.silverbullet.auth.json` の salt が変わり、旧キャッシュの鍵と合わなくなる |
+| 公開 URL が NXDOMAIN | CNAME が自動作成されていない。`<TUNNEL_ID>.cfargotunnel.com` への Proxied CNAME を手動で作成。LAN のルータが負キャッシュしている場合は dnsmasq を再起動 |
