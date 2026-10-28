@@ -29,6 +29,7 @@ Internet ── HTTPS ──▶ Cloudflare Edge
 | `silverbullet.env.example` | `SB_USER`（ログインフォームの認証情報）の雛形 |
 | `cloudflared.env.example` | `TUNNEL_TOKEN` の雛形 |
 | `space/STYLE.md` | space に置く Space Style（和文フォント・行間） |
+| `space/CONFIG.md` | space に置く設定（Mermaid プラグの登録） |
 
 ユニット名は Quadlet が**ファイル名**から生成するため、`cloudflared.container` ではなく
 `silverbullet-cloudflared.container` にしています（他サービスと衝突させないため）。
@@ -69,7 +70,8 @@ space 直下には `silverbullet/space/STYLE.md` をコピーしておく（任�
 反映はクライアントの `System: Reload`。
 
 ```bash
-cp "$REPO"/silverbullet/space/STYLE.md ~/workspace/notes/STYLE.md
+cp "$REPO"/silverbullet/space/STYLE.md  ~/workspace/notes/STYLE.md
+cp "$REPO"/silverbullet/space/CONFIG.md ~/workspace/notes/CONFIG.md
 ```
 
 認証は **HTTP Basic ではなく、`/.auth` のログインフォーム**（Cookie セッション）です。
@@ -112,6 +114,15 @@ systemctl --user mask silverbullet-cloudflared.service
 systemctl --user unmask silverbullet-cloudflared.service
 systemctl --user start silverbullet-cloudflared.service
 ```
+
+## 4.5 プラグ（Mermaid）
+
+`CONFIG.md` の `config.set { plugs = { … } }` に列挙する。追加・変更したらクライアントで
+`Plugs: Update` を実行する。
+
+- `mermaid` プラグは `github:silverbulletmd/silverbullet-mermaid/mermaid.plug.js`
+- **Mermaid 本体は同梱されず jsDelivr から取得する**ので、閲覧側にインターネット接続が必要
+- 完全オフラインにしたい場合は Mermaid を自前で配信し、プラグの `version` / `url` 設定を向ける
 
 ## 5. 確認
 
