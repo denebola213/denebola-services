@@ -13,6 +13,8 @@ hermes/*.env
 !hermes/*.env.example
 trilium/*.env
 !trilium/*.env.example
+silverbullet/*.env
+!silverbullet/*.env.example
 hermes/cloudflared/
 *.key
 *.pem
