@@ -161,5 +161,6 @@ ETAPI で一度だけ書き出して space に置いている。
 | 公開 URL が 200 で Access の 302 にならない | Access アプリ未作成。origin がそのまま露出している |
 | `parsing file ".../-/path/to.env"` で起動失敗 | Quadlet は `EnvironmentFile=-`（任意指定）を解釈せず、`-` がパス扱いになる。`-` を外し、ファイルを先に作る |
 | 設定が反映されない | `.container` を変えたら `systemctl --user daemon-reload` が必要 |
+| 日本語が読みにくい | 既定フォントが `iA-Mono`（和文グリフなし）のため。space の `STYLE` ページに `space-style` ブロックを置き、`--ui-font` / `--editor-font` を system-ui スタック（`"Hiragino Sans", "Noto Sans JP", "Yu Gothic UI"` など）に差し替える。反映はクライアントの `System: Reload` |
 | ログインで `This key does not match an existing local cache` | ブラウザのその origin のローカルデータを消す（DevTools → Application → Clear site data）。space を移すと `.silverbullet.auth.json` の salt が変わり、旧キャッシュの鍵と合わなくなる |
 | 公開 URL が NXDOMAIN | CNAME が自動作成されていない。`<TUNNEL_ID>.cfargotunnel.com` への Proxied CNAME を手動で作成。LAN のルータが負キャッシュしている場合は dnsmasq を再起動 |
