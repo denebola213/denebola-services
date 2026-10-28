@@ -18,9 +18,10 @@ Environment=SB_FOLDER=/data
 Environment=TZ=Asia/Tokyo
 # silverbullet syncs with git; git wants a writable HOME for its credential cache.
 Environment=HOME=/tmp
-# SB_USER (user:password) turns on basic auth. Optional so the unit starts even
-# before the file exists; set it before exposing the service (see the README).
-EnvironmentFile=-%h/silverbullet/silverbullet.env
+# SB_USER (user:password) turns on basic auth. Quadlet does not understand the
+# systemd "-" (optional) prefix here — it becomes part of the path — so this file
+# must exist before the service starts (step 2 of the README creates it).
+EnvironmentFile=%h/silverbullet/silverbullet.env
 # keep-id maps the host user onto uid 1000 so files the app writes in /data stay
 # owned by the host user, not by a subuid.
 UserNS=keep-id:uid=1000,gid=1000

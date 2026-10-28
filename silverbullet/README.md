@@ -57,8 +57,9 @@ cp "$REPO"/silverbullet/cloudflared.env.example ~/silverbullet/cloudflared.env
 chmod 600 ~/silverbullet/*.env
 ```
 
-`SB_USER` は `user:password` 形式。**未設定でも起動しますが、その場合は
-Cloudflare Access を通れば誰でも編集できます。**
+`SB_USER` は `user:password` 形式で、**このファイルは必須**です（Quadlet は `EnvironmentFile=` の
+`-`（任意）指定に対応しておらず、無いと起動しません）。値を空にすると認証なしになり、
+Cloudflare Access を通れば誰でも編集できます。
 
 ## 3. Cloudflare 側
 
@@ -149,4 +150,5 @@ systemctl --user daemon-reload && systemctl --user restart silverbullet.service
 | `bind: address already in use` | 前回の検証コンテナの `pasta` がポートを掴んでいる。`ss -ltnp \| grep 3000` で PID を特定して kill |
 | 公開 URL が 502 | ingress の URL が `silverbullet:3000` か、両コンテナが `silverbullet.network` にいるか確認 |
 | 公開 URL が 200 で Access の 302 にならない | Access アプリ未作成。origin がそのまま露出している |
+| `parsing file ".../-/path/to.env"` で起動失敗 | Quadlet は `EnvironmentFile=-`（任意指定）を解釈せず、`-` がパス扱いになる。`-` を外し、ファイルを先に作る |
 | 設定が反映されない | `.container` を変えたら `systemctl --user daemon-reload` が必要 |
