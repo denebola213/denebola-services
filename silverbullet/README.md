@@ -24,7 +24,7 @@ Internet ── HTTPS ──▶ Cloudflare Edge
 | ファイル | 内容 |
 | --- | --- |
 | `silverbullet.network` | サービス専用ネットワーク |
-| `silverbullet.container` | 本体（loopback バインド、タグ固定） |
+| `silverbullet.container` | 本体（loopback バインド、タグ固定、`:z` で共有ラベル） |
 | `silverbullet-cloudflared.container` | 専用 Cloudflare Tunnel |
 | `silverbullet.env.example` | `SB_USER`（ログインフォームの認証情報）の雛形 |
 | `cloudflared.env.example` | `TUNNEL_TOKEN` の雛形 |

@@ -11,9 +11,10 @@ ContainerName=silverbullet
 # Pinned for the evaluation period. Bump by hand (see the README upgrade section).
 Image=ghcr.io/silverbulletmd/silverbullet:2.12.1
 Network=silverbullet.network
-# The space is a plain markdown directory. For the side-by-side comparison this
-# points at the LLM wiki, so both apps read the same notes.
-Volume=%h/workspace/notes:/data:Z
+# The space is a plain markdown directory holding the human-facing docs.
+# ":z" (shared label) — ":Z" would relabel the dir to this container's MCS pair and
+# lock the Hermes agent container out of the same tree.
+Volume=%h/workspace/notes:/data:z
 Environment=SB_FOLDER=/data
 Environment=TZ=Asia/Tokyo
 # silverbullet syncs with git; git wants a writable HOME for its credential cache.
