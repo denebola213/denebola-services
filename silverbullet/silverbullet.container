@@ -12,9 +12,12 @@ ContainerName=silverbullet
 Image=ghcr.io/silverbulletmd/silverbullet:2.12.1
 Network=silverbullet.network
 # The space is a plain markdown directory holding the human-facing docs.
-# ":z" (shared label) — ":Z" would relabel the dir to this container's MCS pair and
-# lock the Hermes agent container out of the same tree.
+# The space is also written by the Hermes agent container. SELinux relabel (:z/:Z)
+# did not end up sharing an MCS pair here: the dir keeps the agent's category and this
+# container's own label differs, so /data came back "Permission denied" and SilverBullet
+# listed no pages. Disable label separation for this container only; it is loopback-only.
 Volume=%h/workspace/notes:/data:z
+SecurityLabelDisable=true
 Environment=SB_FOLDER=/data
 Environment=TZ=Asia/Tokyo
 # silverbullet syncs with git; git wants a writable HOME for its credential cache.
