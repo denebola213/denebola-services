@@ -9,10 +9,16 @@ After=hermes-agent.service
 # tunnel is ordered after it); Wants here only pulls it in on activation without
 # letting a tunnel failure block the WebUI.
 Wants=hermes-cloudflared.service
+# 派生イメージ（sudo 入り）を先にビルドする。ビルドが失敗しても、ローカルに
+# 既存イメージがあれば起動は続く（Wants なのでハード依存にしない）。
+Wants=hermes-webui-build.service
+After=hermes-webui-build.service
 
 [Container]
 ContainerName=hermes-webui
-Image=ghcr.io/nesquena/hermes-webui:latest
+# 上流 ghcr.io/nesquena/hermes-webui:latest に sudo を足したローカル派生イメージ。
+# ビルドは hermes-webui.build（hermes/Containerfile.apt）が行う。
+Image=localhost/hermes-webui:apt
 Network=hermes.network
 Volume=hermes-home.volume:/home/hermeswebui/.hermes
 Volume=hermes-agent-src.volume:/home/hermeswebui/.hermes/hermes-agent:ro
@@ -26,7 +32,9 @@ Environment=HERMES_API_URL=http://hermes-agent:8642
 UserNS=keep-id
 # Loopback only. cloudflared reaches the WebUI over hermes.network.
 PublishPort=127.0.0.1:8787:8787
-AutoUpdate=registry
+# ローカルビルドのため registry 更新ではなく「ローカルイメージが変わったら
+# 再起動」にする（podman auto-update の対象には残る）。
+AutoUpdate=local
 
 [Service]
 Restart=always

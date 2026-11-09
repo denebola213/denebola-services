@@ -1,0 +1,38 @@
+# 上流の Hermes イメージに sudo を足すだけの派生イメージ。
+#
+# 目的: エージェントのツール実行環境（コンテナ内）で apt を使えるようにする。
+# 上流は :latest で配布されるので FROM は --build-arg BASE= で差し替える
+# （hermes/hermes-agent.build と hermes/hermes-webui.build が指定する）。
+#
+# rootless podman でも sudo は機能する。理由は実測で確認済み:
+#   - コンテナの rootfs は nosuid でマウントされない（/ は rw,relatime）
+#   - setuid ビットがイメージ内で保持される（/usr/bin/su などが -rwsr-xr-x）
+#   - NoNewPrivs=0（podman は rootless でも既定で no-new-privileges を付けない）
+#   - コンテナ内 uid 0 は userns にマップされており（keep-id でも 0 は範囲内）、
+#     euid 0 になれる。ただしマップ先はホストの非 root uid なので、
+#     コンテナ内 root はホスト root にはならない。
+
+# 既定値は置かない。--build-arg が渡らないと FROM で即失敗させ、
+# 「気づかないうちに別のベースイメージで成功する」のを防ぐ
+# （hermes/hermes-agent.build と hermes/hermes-webui.build が PodmanArgs で渡す）。
+ARG BASE
+FROM ${BASE}
+
+# 上流はどちらも USER root（entrypoint が実ユーザーへ落とす）。apt のため明示する。
+USER 0
+
+# 付与先は「ビルド時点の /etc/passwd に居る一般ユーザー」に加え、hermes と
+# hermeswebui を名前で明示する。後者は起動時のフック（usermod -u HERMES_UID）
+# で作られる場合があり、そのときビルド時の passwd には存在しない。
+# 存在しないユーザー名の sudoers エントリは無害（一致しないだけ）。
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends sudo; \
+    rm -rf /var/lib/apt/lists/*; \
+    users="$(printf '%s\n' hermes hermeswebui \
+              $(awk -F: '$3 >= 1000 && $3 < 65534 { print $1 }' /etc/passwd) | sort -u)"; \
+    for u in $users; do \
+      printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$u" > "/etc/sudoers.d/90-$u"; \
+      chmod 0440 "/etc/sudoers.d/90-$u"; \
+    done; \
+    visudo -c

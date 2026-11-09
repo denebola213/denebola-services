@@ -2,10 +2,16 @@
 Description=Hermes Agent (gateway)
 Wants=network-online.target
 After=network-online.target
+# 派生イメージ（sudo 入り）を先にビルドする。ビルドが失敗しても、ローカルに
+# 既存イメージがあれば起動は続く（Wants なのでハード依存にしない）。
+Wants=hermes-agent-build.service
+After=hermes-agent-build.service
 
 [Container]
 ContainerName=hermes-agent
-Image=docker.io/nousresearch/hermes-agent:latest
+# 上流 nousresearch/hermes-agent:latest に sudo を足したローカル派生イメージ。
+# ビルドは hermes-agent.build（hermes/Containerfile.apt）が行う。
+Image=localhost/hermes-agent:apt
 Exec=gateway run
 Network=hermes.network
 Volume=hermes-home.volume:/home/hermes/.hermes
@@ -32,7 +38,9 @@ UserNS=keep-id:uid=10000,gid=10000
 PublishPort=127.0.0.1:8642:8642
 # Loopback only. cloudflared reaches the dashboard over hermes.network.
 PublishPort=127.0.0.1:9119:9119
-AutoUpdate=registry
+# ローカルビルドのため registry 更新ではなく「ローカルイメージが変わったら
+# 再起動」にする（podman auto-update の対象には残る）。
+AutoUpdate=local
 
 [Service]
 Restart=always

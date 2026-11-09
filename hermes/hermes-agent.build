@@ -1,0 +1,12 @@
+[Unit]
+Description=Build derived hermes-agent image with sudo (localhost/hermes-agent:apt)
+
+[Build]
+# コンテキストはこの Containerfile の親ディレクトリ（hermes/）
+File=Containerfile.apt
+SetWorkingDirectory=file
+ImageTag=localhost/hermes-agent:apt
+# 上流 :latest の更新を取り込む。ダイジェストが変わらなければ pull しない
+Pull=newer
+# .build は --build-arg を直接書けないため PodmanArgs で渡す
+PodmanArgs=--build-arg BASE=docker.io/nousresearch/hermes-agent:latest

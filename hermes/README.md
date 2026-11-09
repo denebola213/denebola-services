@@ -87,8 +87,9 @@ REPO="$(pwd)"
 mkdir -p ~/.config/containers/systemd ~/.config/systemd/user ~/hermes ~/workspace
 
 # Quadlet ユニット: リポジトリの実ファイルへ symlink（必ず絶対パスで貼る）
+# .build は派生イメージ（3.5）のビルド定義
 ln -sf "$REPO"/hermes/*.network "$REPO"/hermes/*.volume "$REPO"/hermes/*.container \
-    ~/.config/containers/systemd/
+    "$REPO"/hermes/*.build ~/.config/containers/systemd/
 
 # バックアップ用 systemd ユニット（Quadlet ではない通常の user ユニット）: symlink
 ln -sf "$REPO"/hermes/hermes-backup.service "$REPO"/hermes/hermes-backup.timer \
@@ -188,6 +189,58 @@ systemctl --user start hermes-webui.service   # 依存から agent / hermes-clou
 
 `[Install] WantedBy=default.target` があるため、`enable` は不要（生成ユニットは
 自動起動対象になります）。
+
+### 3.5 コンテナ内で apt を使う（sudo 入り派生イメージ）
+
+上流の `nousresearch/hermes-agent` と `nesquena/hermes-webui` には `sudo` が入っていません。
+エージェントがツール実行環境（このコンテナ）に Debian パッケージを入れられるように、
+sudo を足した**派生イメージをローカルでビルド**します。
+
+- 定義は `hermes/Containerfile.apt` の 1 枚。`FROM` の差し替えは `.build` 側の
+  `PodmanArgs=--build-arg BASE=` が行い、生成物は `localhost/hermes-agent:apt` /
+  `localhost/hermes-webui:apt`。
+- ビルドは `hermes-agent.build` / `hermes-webui.build`（Quadlet `.build` →
+  `hermes-agent-build.service`）が担い、各 `.container` が `Wants=` / `After=` で
+  先に起動させます。したがって 3.4 の起動コマンドは変わりません（初回はビルド込み）。
+- sudoers は `NOPASSWD:ALL` をイメージ内の一般ユーザー（`hermes` / `hermeswebui` と
+  `/etc/passwd` の uid 1000 以上）に付与します。パスワードは要求しません。
+
+初回ビルドは上流イメージの pull（数 GB）を含むため時間がかかります。単体で走らせて
+進捗を見る場合:
+
+```bash
+systemctl --user start hermes-agent-build.service
+journalctl --user -u hermes-agent-build.service -f
+podman images --filter reference='localhost/*:apt'
+```
+
+動作確認（コンテナ内 root になれるか）:
+
+```bash
+podman exec hermes-webui sudo -n id                  # uid=0(root) が出れば OK
+podman exec hermes-webui sudo -n apt-get --version   # apt が使える
+podman exec hermes-agent sudo -n id
+```
+
+**trade-off（重要）**: `Image=` をローカル名にしたため `AutoUpdate=registry` は使えません。
+`AutoUpdate=local` に変えてあり、`podman auto-update` が行うのは「ローカルイメージが
+更新されたときの再起動」だけです。上流の更新は `.build` を走らせて取り込みます
+（`Pull=newer` がダイジェスト差分を見て pull するので、変化が無ければ数秒で終わります）。
+
+```bash
+systemctl --user start hermes-agent-build.service hermes-webui-build.service
+podman auto-update --dry-run     # 再起動対象の確認
+systemctl --user restart hermes-agent.service hermes-webui.service
+```
+
+- **権限の範囲**: rootless ではコンテナ内 root（uid 0）はホストの非 root uid にマップ
+  されるため、sudo でホスト root にはなりません。一方 `hermes-home` と `~/workspace` は
+  マウント済みなので、コンテナ内 root はそれらを書き換えられます（エージェント自身が
+  すでに書ける範囲と同じ）。sudo は**コンテナ内限定**の権限です。
+- `sudo: effective uid is not 0` になる場合は rootfs が `nosuid` でマウントされています
+  （`podman inspect <container> --format '{{.HostConfig.SecurityOpt}}'` と
+  `/proc/self/mountinfo` で確認）。その環境ではこの方法は成立しません。
+- 上流イメージを更新したら `hermes-agent-src` ボリュームの作り直しが要ります（第 7 章）。
 
 ---
 
@@ -378,9 +431,17 @@ systemctl --user start hermes-backup.service
 systemctl --user list-timers hermes-backup.timer
 journalctl --user -u hermes-backup.service -f
 
-# イメージの自動更新（AutoUpdate=registry を付けている場合）
+# 上流イメージの取り込み（派生イメージの再ビルド。3.5）
+systemctl --user start hermes-agent-build.service hermes-webui-build.service
+podman images --filter reference='localhost/*:apt'
+
+# イメージの自動更新（AutoUpdate=local: ローカルイメージの更新を検知して再起動）
+podman auto-update --dry-run
 podman auto-update
 systemctl --user enable --now podman-auto-update.timer
+
+# ビルドで新しいイメージができた後の再起動（auto-update が拾わなかった場合）
+systemctl --user restart hermes-agent.service hermes-webui.service
 ```
 
 > hermes-agent のイメージを更新した後は、`hermes-agent-src` ボリュームが
