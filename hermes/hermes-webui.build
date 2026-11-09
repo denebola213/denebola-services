@@ -2,9 +2,12 @@
 Description=Build derived hermes-webui image with sudo (localhost/hermes-webui:apt)
 
 [Build]
-# コンテキストはこの Containerfile の親ディレクトリ（hermes/）
+# Containerfile.apt は 3.1 の symlink で ~/.config/containers/systemd/ にも置く。
+# 相対 File= はユニットのあるディレクトリ基準で解決されるため（SetWorkingDirectory=file
+# は symlink 越しでは効かない）、コンテキストも同じディレクトリになる。
+# Containerfile は COPY を使わない（FROM + RUN のみ）のでこれで十分。
 File=Containerfile.apt
-SetWorkingDirectory=file
+SetWorkingDirectory=unit
 ImageTag=localhost/hermes-webui:apt
 # 上流 :latest の更新を取り込む。ダイジェストが変わらなければ pull しない
 Pull=newer

@@ -87,9 +87,11 @@ REPO="$(pwd)"
 mkdir -p ~/.config/containers/systemd ~/.config/systemd/user ~/hermes ~/workspace
 
 # Quadlet ユニット: リポジトリの実ファイルへ symlink（必ず絶対パスで貼る）
-# .build は派生イメージ（3.5）のビルド定義
+# .build は派生イメージ（3.5）のビルド定義。Containerfile.apt も .build と同じ
+# ディレクトリに置く（相対 File= はユニットのあるディレクトリ基準で解決される）
 ln -sf "$REPO"/hermes/*.network "$REPO"/hermes/*.volume "$REPO"/hermes/*.container \
-    "$REPO"/hermes/*.build ~/.config/containers/systemd/
+    "$REPO"/hermes/*.build "$REPO"/hermes/Containerfile.apt \
+    ~/.config/containers/systemd/
 
 # バックアップ用 systemd ユニット（Quadlet ではない通常の user ユニット）: symlink
 ln -sf "$REPO"/hermes/hermes-backup.service "$REPO"/hermes/hermes-backup.timer \
@@ -199,6 +201,11 @@ sudo を足した**派生イメージをローカルでビルド**します。
 - 定義は `hermes/Containerfile.apt` の 1 枚。`FROM` の差し替えは `.build` 側の
   `PodmanArgs=--build-arg BASE=` が行い、生成物は `localhost/hermes-agent:apt` /
   `localhost/hermes-webui:apt`。
+- `.build` の `File=Containerfile.apt` は**ユニットのあるディレクトリ基準**で解決される
+  （`SetWorkingDirectory=file` は symlink 越しでは効かない）。そのため 3.1 の symlink で
+  `Containerfile.apt` も `~/.config/containers/systemd/` に置きます。Containerfile は
+  `COPY` を使わない（`FROM` + `RUN` のみ）ので、ビルドコンテキストがそのディレクトリでも
+  問題ありません。
 - ビルドは `hermes-agent.build` / `hermes-webui.build`（Quadlet `.build` →
   `hermes-agent-build.service`）が担い、各 `.container` が `Wants=` / `After=` で
   先に起動させます。したがって 3.4 の起動コマンドは変わりません（初回はビルド込み）。
