@@ -140,6 +140,9 @@ systemctl --user restart immich-server.service
 
 | 症状 | 原因と対処 |
 | --- | --- |
+| `Unit mnt-immich-images.mount not found` | system の `.mount` を user ユニットの `Requires=` に書けない。`ExecStartPre` で `mountpoint -q` を検査する形にしている |
+| `statfs /etc/localtime: no such file or directory`（podman exit 125） | rootless で `/etc/localtime` を bind できない（user namespace 内で zoneinfo の symlink が解決しない）。`TZ=` だけ使う |
+| `chown: changing ownership of '/var/lib/postgresql/data': Permission denied` | `:U` は chown だけで SELinux ラベルは変えない。`:U,Z` にする |
 | `Permission denied` で `/data` が読めない | NFS マウントに `context=container_file_t` が無い、または NFS 側の所有者が uid 1000 でない |
 | postgres が `could not access directory` で落ちる | `:U` が効くのはユーザー所有のディレクトリだけ。空でない/所有者違いのディレクトリを置くと再現する。論理ダンプで入れ直す |
 | 起動しても DB が空 | `immich-postgres` の initdb が先に走る。ダンプは initdb 完了後（`pg_isready` が通ってから）流す |
