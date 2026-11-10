@@ -9,6 +9,7 @@
 | [`quadlet/`](quadlet/QUADLET.md) | Podman Quadlet の導入手順 |
 | [`hermes/`](hermes/README.md) | Hermes Agent + WebUI + Dashboard の Cloudflare Tunnel 公開構成 |
 | [`silverbullet/`](silverbullet/README.md) | SilverBullet（Markdown ベース）を Cloudflare Tunnel で公開。人向け文書の正本（`notes.st-albireo.net`） |
+| [`immich/`](immich/README.md) | Immich（写真・動画）。原本は NAS の NFS、DB とサムネイルはホスト NVMe。rootless Quadlet |
 
 ## Markdown lint
 

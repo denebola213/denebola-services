@@ -1,0 +1,44 @@
+[Unit]
+Description=Immich server (API + web, :2283)
+Wants=immich.network
+After=immich.network
+Requires=immich-postgres.service immich-valkey.service immich-ml.service
+After=immich-postgres.service immich-valkey.service immich-ml.service
+# The NFS export must be mounted before the container starts. mnt-immich-images.mount
+# is a *system* unit (mounting NFS needs root), and a user unit cannot name a system
+# unit in Requires= — that fails with "Unit not found". Guard at runtime instead so
+# a missing mount fails loudly rather than binding an empty directory over the library.
+After=network-online.target
+Wants=immich-cloudflared.service
+
+[Container]
+ContainerName=immich-server
+# Phase 1 runs the version the compose stack was running; the README upgrade
+# section bumps both server and ML together.
+Image=ghcr.io/immich-app/immich-server:v3.3.6
+Network=immich.network
+# The Cloudflare tunnel's published service URL is http://immich_server:2283.
+# Keep that name resolvable so the dashboard needs no change.
+NetworkAlias=immich_server
+# Originals stay on the NAS (OMV btrfs over NFS). The NFS mount carries
+# context=container_file_t, so no :z/:Z here — NFS cannot be relabelled.
+Volume=/mnt/immich-images:/data
+# Derived caches are hot random I/O and are rebuilt if lost, so they move to the
+# NVMe. Phase 1 keeps them on the NAS: the copy runs while the array is busy with
+# a btrfs scrub (~1.4MB/s), so the override is enabled once the copy completes.
+# Volume=%h/immich/data/thumbs:/data/thumbs:Z
+# Volume=%h/immich/data/encoded-video:/data/encoded-video:Z
+# TZ comes from immich.env. Binding /etc/localtime fails rootless on FCOS: it is a
+# symlink into /usr/share/zoneinfo, which does not resolve inside the user namespace
+# ("statfs /etc/localtime: no such file or directory", podman exit 125).
+EnvironmentFile=%h/immich/immich.env
+PublishPort=2283:2283
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+# Fail instead of starting with an empty /data if the NFS export is not mounted.
+ExecStartPre=/bin/sh -c "mountpoint -q /mnt/immich-images || { echo 'NFS /mnt/immich-images not mounted'; exit 1; }"
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Immich shared network
+
+[Network]
+NetworkName=immich
+
+[Install]
+WantedBy=default.target

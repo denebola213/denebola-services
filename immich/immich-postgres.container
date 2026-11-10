@@ -1,0 +1,31 @@
+[Unit]
+Description=Immich PostgreSQL 14 (VectorChord) — rootless, data on local NVMe
+Wants=immich.network
+After=immich.network
+# The DB used to live on the OMV NFS export. It is now a local NVMe directory
+# restored from a logical dump: an NFS `soft` mount under a database is a
+# latency and availability liability, and a raw data-directory copy would carry
+# root/uid-999 ownership that rootless podman cannot adopt. pg_dump removes both
+# problems at once.
+RequiresMountsFor=%h/immich/data/postgres
+
+[Container]
+ContainerName=immich-postgres
+# Pinned by digest: a newer VectorChord/pgvectors build must be a deliberate bump.
+Image=ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:32324a2f41df5de9efe1af166b7008c3f55646f8d0e00d9550c16c9822366b4a
+Network=immich.network
+# immich-server defaults to DB_HOSTNAME=database / REDIS_HOSTNAME=redis.
+NetworkAlias=database
+# :U hands the directory to the image's postgres uid (999). Rootless podman can
+# only chown a directory the invoking user owns, so this directory must stay
+# empty (initdb) or be restored logically — never copied in from another host.
+Volume=%h/immich/data/postgres:/var/lib/postgresql/data:U,Z
+EnvironmentFile=%h/immich/immich.env
+ShmSize=128m
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

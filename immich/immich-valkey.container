@@ -1,0 +1,19 @@
+[Unit]
+Description=Immich Valkey (job queue / cache)
+Wants=immich.network
+After=immich.network
+
+[Container]
+ContainerName=immich-valkey
+# Same image the compose stack ran. immich only needs a redis-compatible
+# server; the pin keeps the move a like-for-like change.
+Image=docker.io/valkey/valkey:8-bookworm@sha256:a137a2b60aca1a75130022d6bb96af423fefae4eb55faf395732db3544803280
+Network=immich.network
+NetworkAlias=redis
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

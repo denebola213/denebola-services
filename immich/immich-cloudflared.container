@@ -1,0 +1,22 @@
+[Unit]
+Description=Immich Cloudflare Tunnel (dedicated tunnel, token-managed ingress)
+Wants=immich.network
+After=immich.network
+After=immich-server.service
+# Requires= would take the app down with the tunnel when the token is missing;
+# the tunnel only needs the app to already be listening on the shared network.
+Wants=immich-server.service
+
+[Container]
+ContainerName=immich-cloudflared
+Image=docker.io/cloudflare/cloudflared:latest
+Network=immich.network
+EnvironmentFile=%h/immich/cloudflared.env
+Exec=tunnel run
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
