@@ -26,11 +26,10 @@ NetworkAlias=immich_server
 # governed by POSIX ownership (uid 1000 on the export).
 SecurityLabelDisable=true
 Volume=/var/mnt/immich:/data
-# Derived caches are hot random I/O and are rebuilt if lost, so they move to the
-# NVMe. Phase 1 keeps them on the NAS: the copy runs while the array is busy with
-# a btrfs scrub (~1.4MB/s), so the override is enabled once the copy completes.
-# Volume=%h/immich/data/thumbs:/data/thumbs:Z
-# Volume=%h/immich/data/encoded-video:/data/encoded-video:Z
+# Derived caches are hot random I/O and are rebuilt if lost, so they live on the
+# NVMe instead of the spinning array.
+Volume=%h/immich/data/thumbs:/data/thumbs:Z
+Volume=%h/immich/data/encoded-video:/data/encoded-video:Z
 # TZ comes from immich.env. Binding /etc/localtime fails rootless on FCOS: it is a
 # symlink into /usr/share/zoneinfo, which does not resolve inside the user namespace
 # ("statfs /etc/localtime: no such file or directory", podman exit 125).
