@@ -1,0 +1,33 @@
+[Unit]
+Description=Immich originals: mount the OMV NFS export at /var/mnt/immich
+Documentation=https://github.com/denebola213/denebola-services/blob/main/immich/README.md
+After=network-online.target
+Wants=network-online.target
+
+# Why a oneshot service instead of a .mount unit:
+#  1. Where= must equal the unit name with / turned into - and literal hyphens
+#     escaped as \x2d, which is easy to get wrong (/var/mnt/immich-images would
+#     need var-mnt-immich\x2dimages.mount).
+#  2. After an unclean OMV shutdown the kernel keeps the old NFS volume cached
+#     (/proc/fs/nfsfs/volumes). A .mount unit then fails with
+#     "mount.nfs4: /var/mnt/immich is busy or already mounted or sharecache fail"
+#     while the very same mount(8) invocation succeeds from a shell.
+# This service runs exactly the command that works, and unmounts on stop.
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Drop a lazily-unmounted leftover first; failure here is expected and harmless.
+ExecStartPre=-/usr/bin/umount -l /var/mnt/immich
+# No context= here on purpose: mounting an NFS export with an SELinux label from
+# a systemd service fails with "mount.nfs4: ... busy or already mounted or
+# sharecache fail" (status 32) even though the identical mount(8) call succeeds
+# from an interactive shell. immich-server therefore runs with
+# SecurityLabelDisable=true and reads/writes the export through POSIX ownership
+# (uid 1000) instead of an SELinux label.
+ExecStart=/usr/bin/mount -t nfs4 -o vers=4,soft,timeo=180 192.168.20.103:/immich-images /var/mnt/immich
+ExecStop=/usr/bin/umount -l /var/mnt/immich
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

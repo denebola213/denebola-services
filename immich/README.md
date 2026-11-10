@@ -15,7 +15,7 @@ immich.network ── immich-server (rootless, :2283)
                     |            |
                     |            +── /data/thumbs          → %h/immich/data/thumbs        (NVMe)
                     |            +── /data/encoded-video   → %h/immich/data/encoded-video (NVMe)
-                    |            +── /data                  → /mnt/immich-images (NFS, 原本)
+                    |            +── /data                  → /var/mnt/immich (NFS, 原本)
                     |
                     +── immich-postgres (pg14 + VectorChord, %h/immich/data/postgres, NVMe)
                     +── immich-valkey   (job queue)
@@ -32,11 +32,12 @@ immich.network ── immich-server (rootless, :2283)
 ## 前提
 
 - Fedora CoreOS。`systemd` の user manager で動く rootless Podman（Quadlet）。
-- NFS のマウントだけは root が必要なので、`mnt-immich-images.mount` は
+- NFS のマウントだけは root が必要なので、`immich-nfs.service` は
   `/etc/systemd/system/` に置く。他のユニットは `~/.config/containers/systemd/` に symlink。
-- NFS の export は `192.168.20.103:/immich-images`。マウントオプションの
-  `context="system_u:object_r:container_file_t:s0"` が無いと rootless Podman は
-  `Permission denied` になる（NFS は `:z`/`:Z` でラベルできない）。
+- NFS の export は `192.168.20.103:/immich-images`。**`context=` を付けたマウントは
+  systemd 配下で失敗する**（`busy or already mounted or sharecache fail`、対話シェルでは成功する）ため、
+  サービスでは `context=` を付けず、`immich-server` を `SecurityLabelDisable=true` で動かしている。
+  NFS は `:z`/`:Z` でラベルできないので、この構成では SELinux ラベルではなく POSIX 所有で制御する。
 - NFS 側のディレクトリ所有者は **ホストユーザー（uid 1000）** であること。
   Docker 時代は root(0) 所有だったため、移行時に一度だけ chown している。
 
@@ -47,9 +48,9 @@ immich.network ── immich-server (rootless, :2283)
 mkdir -p ~/immich/data/{postgres,thumbs,encoded-video,ml-cache}
 
 # 2) NFS マウント（root）
-sudo cp ~/denebola-services/immich/mnt-immich-images.mount /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now mnt-immich-images.mount
-findmnt /mnt/immich-images
+sudo cp ~/denebola-services/immich/immich-nfs.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now immich-nfs.service
+findmnt /var/mnt/immich
 
 # 3) 環境ファイル（秘密はリポジトリ外）
 cp ~/denebola-services/immich/immich.env.example ~/immich/immich.env
@@ -113,8 +114,8 @@ systemctl --user start immich-server.service
 差分だけ流すと停止時間が短い）。
 
 ```bash
-rsync -a /mnt/immich-images/thumbs/        ~/immich/data/thumbs/
-rsync -a /mnt/immich-images/encoded-video/ ~/immich/data/encoded-video/
+rsync -a /var/mnt/immich/thumbs/        ~/immich/data/thumbs/
+rsync -a /var/mnt/immich/encoded-video/ ~/immich/data/encoded-video/
 ```
 
 ## バックアップ
@@ -140,10 +141,11 @@ systemctl --user restart immich-server.service
 
 | 症状 | 原因と対処 |
 | --- | --- |
-| `Unit mnt-immich-images.mount not found` | system の `.mount` を user ユニットの `Requires=` に書けない。`ExecStartPre` で `mountpoint -q` を検査する形にしている |
+| `Unit …mount not found` / `Where= setting doesn't match unit name` | user ユニットから system の `.mount` は参照できない。さらに `.mount` の `Where=` はユニット名と厳密に一致させる必要があり、パス中の `-` は `\x2d` にエスケープが要る（`/var/mnt/immich-images` → `var-mnt-immich\x2dimages.mount`）。**そのため `.mount` をやめ、oneshot の `immich-nfs.service` で `mount(8)` を実行している** |
+| `mount.nfs4: … busy or already mounted or sharecache fail`（status 32） | 2つの原因がある。① 非クリーン停止後はカーネルに古い NFS ボリュームが残る（`/proc/fs/nfsfs/volumes`）ので、先に `umount -l` する。② **`context=` を付けたマウントは systemd 配下で失敗する**（対話シェルでは成功する）。サービスでは `context=` を付けず、コンテナ側で `SecurityLabelDisable=true` にしている |
 | `statfs /etc/localtime: no such file or directory`（podman exit 125） | rootless で `/etc/localtime` を bind できない（user namespace 内で zoneinfo の symlink が解決しない）。`TZ=` だけ使う |
 | `chown: changing ownership of '/var/lib/postgresql/data': Permission denied` | `:U` は chown だけで SELinux ラベルは変えない。`:U,Z` にする |
-| `Permission denied` で `/data` が読めない | NFS マウントに `context=container_file_t` が無い、または NFS 側の所有者が uid 1000 でない |
+| `Permission denied` で `/data` が読めない | NFS 側の所有者が uid 1000 でないか、`SecurityLabelDisable=true` が抜けている |
 | postgres が `could not access directory` で落ちる | `:U` が効くのはユーザー所有のディレクトリだけ。空でない/所有者違いのディレクトリを置くと再現する。論理ダンプで入れ直す |
 | 起動しても DB が空 | `immich-postgres` の initdb が先に走る。ダンプは initdb 完了後（`pg_isready` が通ってから）流す |
 | トンネルは繋がるがアプリに届かない | Cloudflare 側の Service URL が `http://immich_server:2283` か確認。`immich-server` の `NetworkAlias=` で旧名を維持している |

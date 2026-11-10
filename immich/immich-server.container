@@ -20,9 +20,12 @@ Network=immich.network
 # The Cloudflare tunnel's published service URL is http://immich_server:2283.
 # Keep that name resolvable so the dashboard needs no change.
 NetworkAlias=immich_server
-# Originals stay on the NAS (OMV btrfs over NFS). The NFS mount carries
-# context=container_file_t, so no :z/:Z here — NFS cannot be relabelled.
-Volume=/mnt/immich-images:/data
+# Originals stay on the NAS (OMV btrfs over NFS). The export is mounted without an
+# SELinux label (context= from a systemd service fails with EBUSY, see
+# immich-nfs.service), so label separation is off for this container and access is
+# governed by POSIX ownership (uid 1000 on the export).
+SecurityLabelDisable=true
+Volume=/var/mnt/immich:/data
 # Derived caches are hot random I/O and are rebuilt if lost, so they move to the
 # NVMe. Phase 1 keeps them on the NAS: the copy runs while the array is busy with
 # a btrfs scrub (~1.4MB/s), so the override is enabled once the copy completes.
@@ -38,7 +41,7 @@ PublishPort=2283:2283
 Restart=always
 TimeoutStartSec=300
 # Fail instead of starting with an empty /data if the NFS export is not mounted.
-ExecStartPre=/bin/sh -c "mountpoint -q /mnt/immich-images || { echo 'NFS /mnt/immich-images not mounted'; exit 1; }"
+ExecStartPre=/bin/sh -c "mountpoint -q /var/mnt/immich || { echo 'NFS /var/mnt/immich not mounted'; exit 1; }"
 
 [Install]
 WantedBy=default.target
