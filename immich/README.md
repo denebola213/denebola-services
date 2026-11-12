@@ -126,16 +126,64 @@ rsync -a /var/mnt/immich/encoded-video/ ~/immich/data/encoded-video/
 
 ## アップグレード
 
-`immich-server` と `immich-ml` は同じタグで揃える。
+`immich-server` と `immich-ml` は**必ず同じタグ**にする（片方だけ上げると版差で不整合）。
+PostgreSQL と Valkey のイメージは勝手に上げない。上流 compose のタグが動いていても、
+DB イメージの変更はマイグレーションを伴うので別作業として切り出す。
 
-```bash
-cd ~/denebola-services && git pull
-# immich/immich-{server,ml}.container の Image= を新しいタグに編集して push → ホストで pull
-systemctl --user daemon-reload
-systemctl --user restart immich-server.service
-```
+### 手順
 
-**ダウングレード不可**（immich のマイグレーションは一方通行）。上げる前に必ず DB ダンプを取る。
+1. **リリースノートを読む**。対象タグと、その間のすべてのリリースの
+   `Breaking changes` / 移行手順を確認する。破壊的変更は基本的にメジャー（v3 など）に
+   限られるが、DB イメージや拡張の要件が動いていないかは必ず見る。
+   公式の互換表は `https://docs.immich.app/install/upgrading`。
+2. **DB ダンプを取る**（ダウングレード不可なので必須）。アプリは止めずに `pg_dump -Fc` でよい。
+
+   ```bash
+   ts=$(date +%Y%m%d-%H%M%S)
+   podman exec -i immich-postgres pg_dump -U postgres -Fc -d postgres \
+     > ~/immich/backup/immich-pre-<newtag>-$ts.dump
+   podman exec -i immich-postgres pg_restore -l < ~/immich/backup/immich-pre-<newtag>-$ts.dump | wc -l
+   ```
+
+   `wc -l` が数百行（TOC エントリ）返れば中身のあるダンプ。0 バイトや数行なら失敗。
+   sha256 とサイズを控える。`thumbs` / `encoded-video` / `ml-cache` は再生成できるので対象外。
+3. **リポジトリのタグを上げて push** し、ホストで pull する。
+
+   ```bash
+   # 作業クローン
+   sed -i 's/:v<old>$/:v<new>/' immich/immich-{server,ml}.container   # Image= 行を編集
+   git commit -am "immich: bump to v<new>" && git push
+   # ホスト
+   git -C ~/denebola-services pull --ff-only
+   systemctl --user daemon-reload      # .container を変えたので必須
+   systemctl --user restart immich-server.service
+   ```
+
+   `immich-server` の再起動で ML も `Requires=` 側から上がり直す。新しいイメージは
+   `Restart=always` の起動時に pull される（`Pull=` 指定は無いので初回だけ待つ）。
+4. **起動時の DB マイグレーションを待つ**。サーバは起動時にスキーマ更新とインデックス再構築を
+   自動で行う。ログが `Reindexing ...` で止まって見えるのは正常。
+
+   ```bash
+   journalctl --user -u immich-server -f      # "Immich Server is listening" まで
+   ```
+
+5. **確認**（4 点セット）。
+
+   ```bash
+   curl -s http://127.0.0.1:2283/api/server/version   # {"major":<new>,...}
+   podman ps --filter name=immich --format '{{.Names}} | {{.Status}}'
+   systemctl --user is-active immich-ml.service
+   journalctl --user -u immich-server --since '-10min' | grep -iE 'error|migration|reindex' | tail
+   ```
+
+   併せて Web UI でタイムライン・サムネイル・検索（スマート検索/顔）が動くことを見る。
+   ベクターインデックスの再構築中は検索が一時的に遅い／空になることがある。
+
+**ダウングレード不可**（immich のマイグレーションは一方通行）。失敗して戻す場合は
+「旧タグに戻す」ではなく「DB ダンプから復元する」しかない。ダンプは
+`pg_restore -U postgres -d postgres --clean --if-exists` で戻す（手順は「移行」と同じ）。
+戻せることを前提にした作業なので、ダンプの検証まで終えてからタグを上げる。
 
 ## トラブルシューティング
 

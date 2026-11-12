@@ -13,9 +13,8 @@ Wants=immich-cloudflared.service
 
 [Container]
 ContainerName=immich-server
-# Phase 1 runs the version the compose stack was running; the README upgrade
-# section bumps both server and ML together.
-Image=ghcr.io/immich-app/immich-server:v3.3.6
+# Bump together with immich-ml (README の「アップグレード」を参照).
+Image=ghcr.io/immich-app/immich-server:v3.4.1
 Network=immich.network
 # The Cloudflare tunnel's published service URL is http://immich_server:2283.
 # Keep that name resolvable so the dashboard needs no change.

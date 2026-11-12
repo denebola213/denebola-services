@@ -6,7 +6,7 @@ After=immich.network
 [Container]
 ContainerName=immich-ml
 # Keep this tag in lockstep with immich-server.
-Image=ghcr.io/immich-app/immich-machine-learning:v3.3.6
+Image=ghcr.io/immich-app/immich-machine-learning:v3.4.1
 Network=immich.network
 NetworkAlias=immich-machine-learning
 Volume=%h/immich/data/ml-cache:/cache:Z
