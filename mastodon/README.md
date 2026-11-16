@@ -20,7 +20,7 @@ mastodon.network ── mastodon-proxy (nginx :4430, loopback 公開)
                     |        +── http://web:3000       (mastodon-web, Puma)
                     |        +── http://streaming:4000 (mastodon-streaming)
                     |
-                    +── mastodon-web        (Rails / Puma, 127.0.0.1:3000)
+                    +── mastodon-web        (Rails / Puma, 127.0.0.1:3001)
                     +── mastodon-sidekiq    (背景ジョブ)
                     +── mastodon-streaming  (WebSocket,   127.0.0.1:4000)
                     +── mastodon-postgres   (PG17, ~/mastodon/data/postgres, NVMe)
@@ -101,7 +101,7 @@ systemctl --user is-enabled mastodon-web.service      # generated
 systemctl --user is-active  mastodon-{postgres,redis,web,sidekiq,streaming,proxy}.service
 podman ps --filter name=mastodon --format '{{.Names}} | {{.Status}}'
 # origin（トンネルを経由しない直接確認。nginx の proxy_cache を避けるためクエリでキャッシュを外す）
-curl -s http://127.0.0.1:3000/health
+curl -s http://127.0.0.1:3001/health
 curl -s "http://127.0.0.1:4430/api/v2/instance?cb=$RANDOM" -H "Host: mstdn.nostalgia-tns.net" | head -c 200
 curl -s http://127.0.0.1:4000/api/v1/streaming/health
 podman exec mastodon-postgres pg_isready -U mastodon -d mastodon_production
