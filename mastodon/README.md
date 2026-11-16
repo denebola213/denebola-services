@@ -5,7 +5,7 @@ Fediverse サーバ（`mstdn.nostalgia-tns.net`）。以前は **Rock 5B（aarch
 **v4.7.5** で開始しています。
 
 公開は **サービス専用の Cloudflare Tunnel**（既存トンネルをそのまま流用。新規作成なし）で、
-ダッシュボードの Public hostname（`mstdn.nostalgia-tns.net` → `http://proxy:4430`）も
+ダッシュボードの Public hostname（`mstdn.nostalgia-tns.net` → `https://proxy:443`、実トンネルの ingress を確認済み）も
 変更不要です（`mastodon-proxy` が旧 Compose の `proxy` と同じネットワークエイリアスを持つため）。
 
 ## 構成
@@ -13,9 +13,9 @@ Fediverse サーバ（`mstdn.nostalgia-tns.net`）。以前は **Rock 5B（aarch
 ```text
                  Cloudflare Tunnel (mastodon-cloudflared, 既存トンネル流用)
                               |
-                              | http://proxy:4430
+                              | https://proxy:443
                               v
-mastodon.network ── mastodon-proxy (nginx :4430, loopback 公開)
+mastodon.network ── mastodon-proxy (nginx :443 TLS + :4430, loopback 公開)
                     |        |
                     |        +── http://web:3000       (mastodon-web, Puma)
                     |        +── http://streaming:4000 (mastodon-streaming)
@@ -51,14 +51,24 @@ mastodon.network ── mastodon-proxy (nginx :4430, loopback 公開)
   マップし、`data/system` の所有者をホスト側に保ちます（SilverBullet と同じ型）。
 - `data/system` を web と sidekiq で共有するため、SELinux ラベルは `:z`（共有）です。
   `:Z`（専用）だと2つの MCS カテゴリが競合し、互いのファイルが読めなくなります。
-- nginx は **:4430 のみ**。旧スタックの :80 / :443（Let's Encrypt 証明書）ブロックは
-  Cloudflare Tunnel が唯一の入口になったため廃止しました（証明書ファイル不要）。
+- nginx は **:443 TLS が本命**（既存トンネルの ingress `https://proxy:443` に合わせる）。
+  証明書は自己署名（`~/mastodon/data/nginx-certs/`）。接続するのは cloudflared のみで
+  `noTLSVerify:true` のため公開 CA は不要。:4430（平文 h2c）はホスト側の loopback 確認用に併置。
+  旧スタックの :80 リダイレクトブロックは廃止（Cloudflare Tunnel が唯一の入口）。
+  証明書の再生成:
+  ```bash
+  mkdir -p ~/mastodon/data/nginx-certs
+  podman run --rm -v ~/mastodon/data/nginx-certs:/etc/nginx/certs:Z docker.io/library/nginx:1.30-alpine \
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/nginx/certs/proxy.key \
+      -out /etc/nginx/certs/proxy.crt -days 825 -subj "/CN=mstdn.nostalgia-tns.net" \
+      -addext "subjectAltName=DNS:mstdn.nostalgia-tns.net,DNS:proxy"
+  ```
 
 ## セットアップ
 
 ```bash
 # 1) データディレクトリ（すべて rootless ユーザー所有）
-mkdir -p ~/mastodon/data/{postgres,redis,system,nginx-log} ~/mastodon/conf.d
+mkdir -p ~/mastodon/data/{postgres,redis,system,nginx-log,nginx-certs} ~/mastodon/conf.d
 
 # 2) 環境ファイル（秘密はリポジトリ外。ファイルが無いと起動しません）
 cp ~/denebola-services/mastodon/app.env.example        ~/mastodon/app.env
@@ -67,7 +77,7 @@ cp ~/denebola-services/mastodon/cloudflared.env.example ~/mastodon/cloudflared.e
 chmod 600 ~/mastodon/*.env
 # 実値を入れる（移行時は rock5b からコピー。README「移行」参照）
 
-# 3) nginx 設定
+# 3) nginx 設定と自己署名証明書（:443 用。上記「前提」のコマンドで生成）
 cp ~/denebola-services/mastodon/conf.d/nginx.conf ~/mastodon/conf.d/nginx.conf
 
 # 4) ユニットの symlink（basename がユニット名になる）
@@ -102,7 +112,8 @@ systemctl --user is-active  mastodon-{postgres,redis,web,sidekiq,streaming,proxy
 podman ps --filter name=mastodon --format '{{.Names}} | {{.Status}}'
 # origin（トンネルを経由しない直接確認。nginx の proxy_cache を避けるためクエリでキャッシュを外す）
 curl -s http://127.0.0.1:3001/health
-curl -s "http://127.0.0.1:4430/api/v2/instance?cb=$RANDOM" -H "Host: mstdn.nostalgia-tns.net" | head -c 200
+# :4430 is plain h2c; Rails answers 301 to https. Follow it for the body:
+curl -sk -L "http://127.0.0.1:4430/api/v2/instance?cb=$RANDOM" -H "Host: mstdn.nostalgia-tns.net" | head -c 200
 curl -s http://127.0.0.1:4000/api/v1/streaming/health
 podman exec mastodon-postgres pg_isready -U mastodon -d mastodon_production
 stat -c '%U:%G %n' ~/mastodon/data/system
@@ -172,7 +183,7 @@ ssh <old-host> 'cat <old-service-dir>/tunnel.env' | ssh <new-host> 'cat > ~/mast
 4. その直後に FCOS 側 cloudflared を起動（`systemctl --user start mastodon-cloudflared.service`）
 5. 公開 URL を検証: `curl -s "https://mstdn.nostalgia-tns.net/api/v2/instance?cb=$RANDOM"`
 
-ダッシュボード側の変更は不要です（origin は `http://proxy:4430` のまま）。
+ダッシュボード側の変更は不要です（origin は `https://proxy:443` のまま）。
 旧ホストのデータ（旧 Compose の配置ディレクトリ、volume、backup/）は
 削除せず、切り戻し用に保持します。
 
@@ -198,7 +209,7 @@ ssh <old-host> 'cat <old-service-dir>/tunnel.env' | ssh <new-host> 'cat > ~/mast
 
 - **nginx が古いバージョンを返し続ける**: nginx は upstream の IP を起動時に解決します。
   web を再作成したら必ず `systemctl --user restart mastodon-proxy.service`。切り分けは
-  `curl "http://127.0.0.1:4430/api/v2/instance?cb=$RANDOM"` で origin を直接叩く。
+  `curl -sk -L "http://127.0.0.1:4430/api/v2/instance?cb=$RANDOM"` で origin を直接叩く。
 - **`TUNNEL_TOKEN` が空で cloudflared が落ちる**: `~/mastodon/cloudflared.env` が
   ユニットの読むパスに入っているか、値の長さだけ確認する（値は表示しない）。
 - **`Permission denied` で添付が読めない**: `podman inspect mastodon-web --format '{{.ProcessLabel}}'` と

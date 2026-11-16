@@ -1,5 +1,5 @@
 [Unit]
-Description=Mastodon nginx proxy (tunnel-facing :4430 only)
+Description=Mastodon nginx proxy (tunnel-facing :443 TLS, and :4430 h2c for loopback checks)
 Wants=mastodon-web.service mastodon-streaming.service
 After=mastodon-web.service mastodon-streaming.service
 Wants=mastodon-cloudflared.service
@@ -10,18 +10,22 @@ ContainerName=mastodon-proxy
 # Same image the old Docker Compose stack ran (rock5b).
 Image=docker.io/library/nginx:1.30-alpine
 Network=mastodon.network
-# The EXISTING Cloudflare Tunnel's dashboard points its public hostname at
-# http://proxy:4430 (the old Compose service name). Keep that name resolvable
-# so the tunnel needs no dashboard change at all.
+# The EXISTING Cloudflare Tunnel's ingress points its public hostname at
+# https://proxy:443 (verified from the live tunnel config, not assumed).
+# Keep the "proxy" network alias and the :443 TLS listener so the tunnel
+# needs no dashboard change at all. :4430 (plain h2c) stays for loopback
+# origin checks.
 NetworkAlias=proxy
-# Tunnel-facing listener only (conf.d/nginx.conf serves :4430). The old
-# stack's :80/:443 blocks needed Let's Encrypt certs; Cloudflare Tunnel is
-# the only ingress now, so they are dropped — see README.md.
+# Listeners: :443 TLS (tunnel ingress, self-signed cert — the tunnel uses
+# noTLSVerify:true) and :4430 plain h2c (loopback checks). The old stack's
+# :80 redirect block is dropped: the tunnel is the only ingress.
 Volume=%h/mastodon/conf.d:/etc/nginx/conf.d:ro,Z
 Volume=%h/mastodon/data/nginx-log:/var/log/nginx:Z
+Volume=%h/mastodon/data/nginx-certs:/etc/nginx/certs:ro,Z
 # Loopback only, for origin verification. cloudflared reaches the proxy over
 # mastodon.network.
 PublishPort=127.0.0.1:4430:4430
+PublishPort=127.0.0.1:8443:443
 
 [Service]
 Restart=always
