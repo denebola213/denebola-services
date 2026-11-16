@@ -26,8 +26,10 @@ Environment=MASTODON_PROMETHEUS_EXPORTER_LOCAL=true
 Environment=MASTODON_PROMETHEUS_EXPORTER_HOST=0.0.0.0
 Environment=MASTODON_PROMETHEUS_EXPORTER_PORT=9394
 Exec=bundle exec puma -C config/puma.rb
-# Loopback only. nginx reaches the app over mastodon.network.
-PublishPort=127.0.0.1:3000:3000
+# Host loopback 3001 -> container 3000. 127.0.0.1:3000 is taken by SilverBullet
+# on this host, so 3001 avoids the clash; nginx still reaches web:3000 over
+# the mastodon network.
+PublishPort=127.0.0.1:3001:3000
 
 [Service]
 Restart=always
