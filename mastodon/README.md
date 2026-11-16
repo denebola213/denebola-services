@@ -56,6 +56,7 @@ mastodon.network ── mastodon-proxy (nginx :443 TLS + :4430, loopback 公開)
   `noTLSVerify:true` のため公開 CA は不要。:4430（平文 h2c）はホスト側の loopback 確認用に併置。
   旧スタックの :80 リダイレクトブロックは廃止（Cloudflare Tunnel が唯一の入口）。
   証明書の再生成:
+
   ```bash
   mkdir -p ~/mastodon/data/nginx-certs
   podman run --rm -v ~/mastodon/data/nginx-certs:/etc/nginx/certs:Z docker.io/library/nginx:1.30-alpine \
