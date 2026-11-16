@@ -1,0 +1,27 @@
+[Unit]
+Description=Mastodon PostgreSQL 17 — rootless, data on local NVMe
+Wants=mastodon.network
+After=mastodon.network
+RequiresMountsFor=%h/mastodon/data/postgres
+
+[Container]
+ContainerName=mastodon-postgres
+# Same image the old Docker Compose stack ran (rock5b).
+Image=docker.io/library/postgres:17-alpine
+Network=mastodon.network
+# app.env addresses the database as DB_HOST=db. Keep that name resolvable so
+# the migrated app.env works verbatim.
+NetworkAlias=db
+# :U hands the directory to the image's postgres uid. Rootless podman can only
+# chown a directory the invoking user owns, so this directory must stay empty
+# (initdb) or be restored logically — never copied in from another host.
+Volume=%h/mastodon/data/postgres:/var/lib/postgresql/data:U,Z
+EnvironmentFile=%h/mastodon/postgres.env
+ShmSize=256m
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

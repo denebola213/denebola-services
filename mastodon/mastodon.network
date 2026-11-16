@@ -1,0 +1,8 @@
+[Unit]
+Description=Mastodon shared network
+
+[Network]
+NetworkName=mastodon
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,31 @@
+[Unit]
+Description=Mastodon nginx proxy (tunnel-facing :4430 only)
+Wants=mastodon-web.service mastodon-streaming.service
+After=mastodon-web.service mastodon-streaming.service
+Wants=mastodon-cloudflared.service
+RequiresMountsFor=%h/mastodon/conf.d
+
+[Container]
+ContainerName=mastodon-proxy
+# Same image the old Docker Compose stack ran (rock5b).
+Image=docker.io/library/nginx:1.30-alpine
+Network=mastodon.network
+# The EXISTING Cloudflare Tunnel's dashboard points its public hostname at
+# http://proxy:4430 (the old Compose service name). Keep that name resolvable
+# so the tunnel needs no dashboard change at all.
+NetworkAlias=proxy
+# Tunnel-facing listener only (conf.d/nginx.conf serves :4430). The old
+# stack's :80/:443 blocks needed Let's Encrypt certs; Cloudflare Tunnel is
+# the only ingress now, so they are dropped — see README.md.
+Volume=%h/mastodon/conf.d:/etc/nginx/conf.d:ro,Z
+Volume=%h/mastodon/data/nginx-log:/var/log/nginx:Z
+# Loopback only, for origin verification. cloudflared reaches the proxy over
+# mastodon.network.
+PublishPort=127.0.0.1:4430:4430
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,26 @@
+[Unit]
+Description=Mastodon Redis 7 (cache / Sidekiq queue — rebuilt if lost)
+Wants=mastodon.network
+After=mastodon.network
+RequiresMountsFor=%h/mastodon/data/redis
+
+[Container]
+ContainerName=mastodon-redis
+# Same image the old Docker Compose stack ran (rock5b).
+Image=docker.io/library/redis:7-alpine
+Network=mastodon.network
+# app.env addresses Redis as REDIS_HOST=redis. Keep that name resolvable so
+# the migrated app.env works verbatim.
+NetworkAlias=redis
+# :U hands the directory to the image's redis uid. Redis is a cache here: it is
+# NOT migrated from rock5b (dump.rdb is not copied). Queued Sidekiq jobs from
+# the old host are dropped at cutover — see README.md.
+Volume=%h/mastodon/data/redis:/data:U,Z
+Exec=redis-server --appendonly no
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,26 @@
+[Unit]
+Description=Mastodon streaming (WebSocket, :4000)
+Wants=mastodon-postgres.service mastodon-redis.service
+After=mastodon-postgres.service mastodon-redis.service
+
+[Container]
+ContainerName=mastodon-streaming
+# Same release line as mastodon-web (v4.7.5).
+Image=ghcr.io/mastodon/mastodon-streaming:v4.7.5
+Network=mastodon.network
+# nginx upstreams address the app as web:3000 and streaming:4000.
+NetworkAlias=streaming
+# The streaming image runs as uid 991 (mastodon) too.
+UserNS=keep-id:uid=991,gid=991
+User=991:991
+EnvironmentFile=%h/mastodon/app.env
+Exec=node ./streaming/index.js
+# Loopback only. nginx reaches streaming over mastodon.network.
+PublishPort=127.0.0.1:4000:4000
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

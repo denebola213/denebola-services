@@ -1,0 +1,29 @@
+[Unit]
+Description=Mastodon Sidekiq (background jobs)
+Wants=mastodon-postgres.service mastodon-redis.service
+After=mastodon-postgres.service mastodon-redis.service
+
+[Container]
+ContainerName=mastodon-sidekiq
+# Same image and version as mastodon-web.
+Image=ghcr.io/mastodon/mastodon:v4.7.5
+Network=mastodon.network
+# Shares /mastodon/public/system with mastodon-web. Same keep-id mapping so
+# both see host-owned files as uid 991.
+UserNS=keep-id:uid=991,gid=991
+User=991:991
+# :z (shared) — see mastodon-web.container for why not :Z.
+Volume=%h/mastodon/data/system:/mastodon/public/system:z
+EnvironmentFile=%h/mastodon/app.env
+Environment=MASTODON_PROMETHEUS_EXPORTER_ENABLED=true
+Environment=MASTODON_PROMETHEUS_EXPORTER_LOCAL=true
+Environment=MASTODON_PROMETHEUS_EXPORTER_HOST=0.0.0.0
+Environment=MASTODON_PROMETHEUS_EXPORTER_PORT=9394
+Exec=bundle exec sidekiq
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

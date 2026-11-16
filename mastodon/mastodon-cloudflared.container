@@ -1,0 +1,24 @@
+[Unit]
+Description=Mastodon Cloudflare Tunnel (dedicated tunnel REUSED from rock5b, token-managed ingress)
+Wants=mastodon.network
+After=mastodon.network
+After=mastodon-proxy.service
+# Requires= would take the app down with the tunnel when the token is missing;
+# the tunnel only needs the app to already be listening on the shared network.
+Wants=mastodon-proxy.service
+
+[Container]
+ContainerName=mastodon-cloudflared
+# Tracks the same cloudflared release as the other services in this repo.
+Image=docker.io/cloudflare/cloudflared:latest
+Network=mastodon.network
+EnvironmentFile=%h/mastodon/cloudflared.env
+Exec=tunnel --no-autoupdate run
+AutoUpdate=registry
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

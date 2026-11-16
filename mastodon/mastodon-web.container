@@ -1,0 +1,37 @@
+[Unit]
+Description=Mastodon web (Rails / Puma, :3000)
+Wants=mastodon-postgres.service mastodon-redis.service
+After=mastodon-postgres.service mastodon-redis.service
+Wants=mastodon-cloudflared.service
+
+[Container]
+ContainerName=mastodon-web
+# Pinned to the version running on rock5b at migration time. Bump by hand
+# (see the README upgrade section).
+Image=ghcr.io/mastodon/mastodon:v4.7.5
+Network=mastodon.network
+# nginx upstreams address the app as web:3000 and streaming:4000.
+NetworkAlias=web
+# The stock image runs as uid 991 (mastodon) with no su/chown step, so
+# keep-id can map the host user (1000) onto 991: files in the system dir stay
+# host-owned and directly back-up-able, matching the SilverBullet pattern.
+UserNS=keep-id:uid=991,gid=991
+User=991:991
+# :z (shared) not :Z — web and sidekiq share this directory. Two private MCS
+# labels on one directory would lock each container out of the other's files.
+Volume=%h/mastodon/data/system:/mastodon/public/system:z
+EnvironmentFile=%h/mastodon/app.env
+Environment=MASTODON_PROMETHEUS_EXPORTER_ENABLED=true
+Environment=MASTODON_PROMETHEUS_EXPORTER_LOCAL=true
+Environment=MASTODON_PROMETHEUS_EXPORTER_HOST=0.0.0.0
+Environment=MASTODON_PROMETHEUS_EXPORTER_PORT=9394
+Exec=bundle exec puma -C config/puma.rb
+# Loopback only. nginx reaches the app over mastodon.network.
+PublishPort=127.0.0.1:3000:3000
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
