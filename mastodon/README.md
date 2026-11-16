@@ -116,8 +116,8 @@ DB のデータディレクトリを丸ごとコピーしてはいけません�
 uid 所有を引き継げないため、**論理ダンプ/リストア**で移します（Immich と同じ手順）。
 
 ```bash
-# 旧ホスト（rock5b）で、まず web / sidekiq を止めて書き込みを止める
-cd /home/dene/services/mstdn.nostalgia-tns.net
+# 旧ホストで、まず web / sidekiq を止めて書き込みを止める
+# （旧 Compose の配置ディレクトリに入る。パスはホスト固有のため省略）
 docker compose stop web sidekiq streaming
 
 # DB の論理ダンプ（-Fc は約 1 GB、テキストの pg_dumpall の約 1/4）
@@ -136,9 +136,10 @@ podman exec mastodon-postgres pg_isready -U mastodon -d mastodon_production
 keep-id でコンテナ内 uid 991 として見えます）:
 
 ```bash
-# rock5b 側（volume の中身をコンテナ経由で読む。dene に volume 直接読み権限は無い）
-docker exec mstdnnostalgia-tnsnet-web-1 tar -C /mastodon/public/system -cf - . \
-  | ssh <fcos> 'tar -C ~/mastodon/data/system -xf -'
+# 旧ホスト側（volume の中身をコンテナ経由で読む。旧ホストのユーザーに
+# volume 直接読み権限は無い）
+docker exec <compose-project>-web-1 tar -C /mastodon/public/system -cf - . \
+  | ssh <new-host> 'tar -C ~/mastodon/data/system -xf -'
 ```
 
 Redis（`dump.rdb`）は**コピーしません**。キャッシュとして再構築されますが、
@@ -148,10 +149,11 @@ Redis（`dump.rdb`）は**コピーしません**。キャッシュとして再�
 秘密（`web.env` / `db.env` / `tunnel.env`）は値を画面に出さず、ホスト間パイプで移します:
 
 ```bash
-# rock5b → FCOS（リポジトリには置かない。chmod 600）
-ssh rock 'cat /home/dene/services/mstdn.nostalgia-tns.net/web.env'    | ssh fcos 'cat > ~/mastodon/app.env && chmod 600 ~/mastodon/app.env'
-ssh rock 'cat /home/dene/services/mstdn.nostalgia-tns.net/db.env'     | ssh fcos 'cat > ~/mastodon/postgres.env && chmod 600 ~/mastodon/postgres.env'
-ssh rock 'cat /home/dene/services/mstdn.nostalgia-tns.net/tunnel.env' | ssh fcos 'cat > ~/mastodon/cloudflared.env && chmod 600 ~/mastodon/cloudflared.env'
+# 旧ホスト → 新ホスト（リポジトリには置かない。chmod 600。
+# 旧ホスト側のパスはホスト固有のため <old-service-dir> とする）
+ssh <old-host> 'cat <old-service-dir>/web.env'    | ssh <new-host> 'cat > ~/mastodon/app.env && chmod 600 ~/mastodon/app.env'
+ssh <old-host> 'cat <old-service-dir>/db.env'     | ssh <new-host> 'cat > ~/mastodon/postgres.env && chmod 600 ~/mastodon/postgres.env'
+ssh <old-host> 'cat <old-service-dir>/tunnel.env' | ssh <new-host> 'cat > ~/mastodon/cloudflared.env && chmod 600 ~/mastodon/cloudflared.env'
 ```
 
 `app.env` の `DB_HOST=db` / `REDIS_HOST=redis` はネットワークエイリアスでそのまま解決されるため、
@@ -171,7 +173,7 @@ ssh rock 'cat /home/dene/services/mstdn.nostalgia-tns.net/tunnel.env' | ssh fcos
 5. 公開 URL を検証: `curl -s "https://mstdn.nostalgia-tns.net/api/v2/instance?cb=$RANDOM"`
 
 ダッシュボード側の変更は不要です（origin は `http://proxy:4430` のまま）。
-旧ホストのデータ（`/home/dene/services/mstdn.nostalgia-tns.net`、volume、backup/）は
+旧ホストのデータ（旧 Compose の配置ディレクトリ、volume、backup/）は
 削除せず、切り戻し用に保持します。
 
 ## バックアップ
