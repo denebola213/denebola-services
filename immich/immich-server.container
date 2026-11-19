@@ -14,7 +14,7 @@ Wants=immich-cloudflared.service
 [Container]
 ContainerName=immich-server
 # Bump together with immich-ml (README の「アップグレード」を参照).
-Image=ghcr.io/immich-app/immich-server:v3.4.1
+Image=ghcr.io/immich-app/immich-server:v3.4.2
 Network=immich.network
 # The Cloudflare tunnel's published service URL is http://immich_server:2283.
 # Keep that name resolvable so the dashboard needs no change.
