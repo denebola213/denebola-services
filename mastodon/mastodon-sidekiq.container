@@ -6,7 +6,7 @@ After=mastodon-postgres.service mastodon-redis.service
 [Container]
 ContainerName=mastodon-sidekiq
 # Same image and version as mastodon-web.
-Image=ghcr.io/mastodon/mastodon:v4.7.5
+Image=ghcr.io/mastodon/mastodon:v4.7.6
 Network=mastodon.network
 # Shares /mastodon/public/system with mastodon-web. Same keep-id mapping so
 # both see host-owned files as uid 991.

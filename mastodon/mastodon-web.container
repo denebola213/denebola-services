@@ -8,7 +8,7 @@ Wants=mastodon-cloudflared.service
 ContainerName=mastodon-web
 # Pinned to the version running on rock5b at migration time. Bump by hand
 # (see the README upgrade section).
-Image=ghcr.io/mastodon/mastodon:v4.7.5
+Image=ghcr.io/mastodon/mastodon:v4.7.6
 Network=mastodon.network
 # nginx upstreams address the app as web:3000 and streaming:4000.
 NetworkAlias=web
